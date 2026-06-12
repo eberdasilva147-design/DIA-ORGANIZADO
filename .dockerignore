@@ -1,0 +1,10 @@
+.git
+.github
+.idea
+.dart_tool
+build
+android
+test
+*.iml
+README.md
+supabase
