@@ -21,5 +21,8 @@ class SupabaseConfig {
 
   /// Enquanto não configurado, o app roda em modo local (sem nuvem).
   static bool get isConfigured =>
-      !url.contains('SEU-PROJETO') && anonKey != 'SUA_ANON_KEY';
+      url.isNotEmpty &&
+      anonKey.isNotEmpty &&
+      !url.contains('SEU-PROJETO') &&
+      anonKey != 'SUA_ANON_KEY';
 }
