@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -34,7 +35,13 @@ class _VoiceScreenState extends State<VoiceScreen>
 
   Future<void> _initSpeech() async {
     _available = await _speech.initialize(
-      onError: (_) => setState(() => _listening = false),
+      onError: (e) => setState(() {
+        _listening = false;
+        // 'no-speech' não é um erro real: o usuário só ficou em silêncio
+        _feedback = e.errorMsg == 'no-speech' || e.errorMsg == 'error_no_match'
+            ? 'Não ouvi nada. Toque no microfone e tente de novo.'
+            : '⚠️ Erro no microfone: ${e.errorMsg}';
+      }),
     );
     setState(() {});
   }
@@ -54,6 +61,8 @@ class _VoiceScreenState extends State<VoiceScreen>
     if (_listening) {
       await _speech.stop();
       setState(() => _listening = false);
+      // Se o usuário parou manualmente, processa o que já foi dito
+      if (_transcript.isNotEmpty) _processCommand(_transcript);
     } else {
       setState(() {
         _listening = true;
@@ -68,7 +77,8 @@ class _VoiceScreenState extends State<VoiceScreen>
             setState(() => _listening = false);
           }
         },
-        localeId: 'pt_BR',
+        // Navegador usa hífen (pt-BR); Android/iOS usam underscore (pt_BR)
+        localeId: kIsWeb ? 'pt-BR' : 'pt_BR',
         listenFor: const Duration(seconds: 30),
         pauseFor: const Duration(seconds: 3),
       );
