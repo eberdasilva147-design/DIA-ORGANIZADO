@@ -20,6 +20,9 @@ dependencies:
   # Reconhecimento de voz
   speech_to_text: ^7.3.0
 
+  # Síntese de voz (respostas faladas)
+  flutter_tts: ^4.2.0
+
   # Gerenciamento de estado
   provider: ^6.1.2
 

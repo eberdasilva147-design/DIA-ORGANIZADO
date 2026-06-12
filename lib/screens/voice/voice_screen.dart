@@ -8,6 +8,8 @@ import '../../models/appointment_model.dart';
 import '../../providers/task_provider.dart';
 import '../../providers/note_provider.dart';
 import '../../providers/appointment_provider.dart';
+import '../../providers/settings_provider.dart';
+import '../../services/tts_service.dart';
 import '../../utils/app_colors.dart';
 
 class VoiceScreen extends StatefulWidget {
@@ -44,14 +46,12 @@ class _VoiceScreenState extends State<VoiceScreen>
       onError: (e) {
         debugPrint('STT erro: ${e.errorMsg} (permanente: ${e.permanent})');
         if (!mounted) return;
-        setState(() {
-          _listening = false;
-          // 'no-speech' não é um erro real: o usuário só ficou em silêncio
-          _feedback = e.errorMsg == 'no-speech' || e.errorMsg == 'error_no_match'
-              ? 'Não ouvi nada. Verifique se o microfone certo está '
-                  'selecionado no Windows e tente de novo.'
-              : '⚠️ Erro no microfone: ${e.errorMsg}';
-        });
+        setState(() => _listening = false);
+        // 'no-speech' não é um erro real: o usuário só ficou em silêncio
+        _say(e.errorMsg == 'no-speech' || e.errorMsg == 'error_no_match'
+            ? 'Não ouvi nada. Verifique se o microfone certo está '
+                'selecionado no Windows e tente de novo.'
+            : '⚠️ Erro no microfone: ${e.errorMsg}');
       },
       onStatus: (status) {
         debugPrint('STT status: $status | transcript: "$_transcript"');
@@ -77,6 +77,7 @@ class _VoiceScreenState extends State<VoiceScreen>
     _pulseCtrl.dispose();
     _typedCtrl.dispose();
     _speech.stop();
+    TtsService().stop();
     super.dispose();
   }
 
@@ -95,6 +96,8 @@ class _VoiceScreenState extends State<VoiceScreen>
         _processCommand(_transcript);
       }
     } else {
+      // Cala a resposta falada antes de ouvir, senão o app escuta a si mesmo
+      await TtsService().stop();
       setState(() {
         _listening = true;
         _processed = false;
@@ -288,7 +291,14 @@ class _VoiceScreenState extends State<VoiceScreen>
     return null;
   }
 
-  void _say(String msg) => setState(() => _feedback = msg);
+  /// Mostra a resposta na tela e fala em voz alta
+  /// (a menos que o som esteja desligado nas configurações).
+  void _say(String msg) {
+    setState(() => _feedback = msg);
+    if (context.read<SettingsProvider>().sound) {
+      TtsService().speak(msg);
+    }
+  }
 
   // ═══════════════════════════════════════════════════════════════════
   // Comandos
