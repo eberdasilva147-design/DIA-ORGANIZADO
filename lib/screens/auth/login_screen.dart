@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../providers/auth_provider.dart';
 import '../../utils/app_colors.dart';
 import '../main_scaffold.dart';
@@ -17,6 +18,41 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   bool _obscure = true;
+  bool _rememberMe = false;
+
+  static const _kRemember = 'lembrar_credenciais';
+  static const _kEmail = 'lembrar_email';
+  static const _kPassword = 'lembrar_senha';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedCredentials();
+  }
+
+  Future<void> _loadSavedCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_kRemember) ?? false) {
+      setState(() {
+        _rememberMe = true;
+        _emailCtrl.text = prefs.getString(_kEmail) ?? '';
+        _passCtrl.text = prefs.getString(_kPassword) ?? '';
+      });
+    }
+  }
+
+  Future<void> _saveOrClearCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_rememberMe) {
+      await prefs.setBool(_kRemember, true);
+      await prefs.setString(_kEmail, _emailCtrl.text.trim());
+      await prefs.setString(_kPassword, _passCtrl.text);
+    } else {
+      await prefs.remove(_kRemember);
+      await prefs.remove(_kEmail);
+      await prefs.remove(_kPassword);
+    }
+  }
 
   @override
   void dispose() {
@@ -31,6 +67,8 @@ class _LoginScreenState extends State<LoginScreen> {
     final ok = await auth.signIn(_emailCtrl.text.trim(), _passCtrl.text);
     if (!mounted) return;
     if (ok) {
+      await _saveOrClearCredentials();
+      if (!mounted) return;
       Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const MainScaffold()));
     }
@@ -102,6 +140,36 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: const TextStyle(color: AppColors.textPrimary),
                       validator: (v) =>
                           v == null || v.length < 6 ? 'Mínimo 6 caracteres' : null,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: Checkbox(
+                            value: _rememberMe,
+                            activeColor: AppColors.gold,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            side: const BorderSide(
+                                color: AppColors.textSecondary, width: 1.5),
+                            onChanged: (v) =>
+                                setState(() => _rememberMe = v ?? false),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: () =>
+                              setState(() => _rememberMe = !_rememberMe),
+                          child: const Text(
+                            'Lembrar e-mail e senha',
+                            style: TextStyle(
+                                color: AppColors.textSecondary, fontSize: 13),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
