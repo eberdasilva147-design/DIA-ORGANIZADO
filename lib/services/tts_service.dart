@@ -18,10 +18,14 @@ class TtsService {
     await _tts.setSpeechRate(kIsWeb ? 1.0 : 0.5);
     await _tts.setPitch(1.0);
     await _tts.setVolume(1.0);
+    // speak() só completa quando a fala termina — permite ao modo
+    // conversa reabrir o microfone na hora certa
+    await _tts.awaitSpeakCompletion(true);
     _initialized = true;
   }
 
   /// Fala o texto em voz alta (limpa emojis e formatação antes).
+  /// O Future completa quando a fala TERMINA.
   Future<void> speak(String text) async {
     final clean = _cleanForSpeech(text);
     if (clean.isEmpty) return;

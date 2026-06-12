@@ -4,8 +4,10 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
+// Flash-Lite: o mais rápido do free tier (~1000 comandos/dia) e sem
+// "thinking" demorado — ideal para interpretar comandos de voz.
 const GEMINI_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -125,6 +127,8 @@ Deno.serve(async (req) => {
           responseMimeType: "application/json",
           responseSchema: RESPONSE_SCHEMA,
           temperature: 0.3,
+          // Desliga o "modo pensar" — resposta em ~1s em vez de vários segundos
+          thinkingConfig: { thinkingBudget: 0 },
         },
       }),
     });

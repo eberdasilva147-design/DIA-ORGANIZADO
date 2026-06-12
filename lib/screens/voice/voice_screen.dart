@@ -33,6 +33,8 @@ class _VoiceScreenState extends State<VoiceScreen>
   String _status = '';
   String _source = ''; // 'ai' | 'basic' — origem da última resposta
   AiVoiceService? _ai;
+  bool _conversationMode = false; // mic reabre sozinho após a resposta
+  bool _muteWhileSpeaking = true; // mic mudo enquanto a IA fala
   late AnimationController _pulseCtrl;
 
   @override
@@ -124,7 +126,8 @@ class _VoiceScreenState extends State<VoiceScreen>
           // Navegador usa hífen (pt-BR); Android/iOS usam underscore (pt_BR)
           localeId: kIsWeb ? 'pt-BR' : 'pt_BR',
           listenFor: const Duration(seconds: 30),
-          pauseFor: const Duration(seconds: 3),
+          // 2s de silêncio já encerra a fala (3s deixava lento)
+          pauseFor: const Duration(seconds: 2),
           partialResults: true,
           cancelOnError: true,
         ),
@@ -338,7 +341,8 @@ class _VoiceScreenState extends State<VoiceScreen>
     try {
       final reply = await _ai!.process(text);
       if (!mounted) return;
-      _say('✅ $reply');
+      setState(() => _feedback = '✅ $reply');
+      await _speakAndMaybeContinue(reply);
     } on AiQuotaException {
       if (!mounted) return;
       setState(() => _source = 'basic');
@@ -350,6 +354,24 @@ class _VoiceScreenState extends State<VoiceScreen>
       setState(() => _source = 'basic');
       _processCommandOffline(text);
     }
+  }
+
+  /// Fala a resposta e, no modo conversa, reabre o microfone em seguida.
+  Future<void> _speakAndMaybeContinue(String reply) async {
+    final sound = context.read<SettingsProvider>().sound;
+
+    // Opção do usuário: ouvir ENQUANTO ela fala (risco de eco, escolha dele)
+    if (_conversationMode && !_muteWhileSpeaking && !_listening) {
+      await _toggleListening();
+    }
+
+    if (sound) {
+      // speak() só completa quando a fala termina (mic mudo nesse período)
+      await TtsService().speak(reply);
+    }
+
+    if (!mounted || !_conversationMode) return;
+    if (!_listening) await _toggleListening();
   }
 
   /// Interpretador por regras (offline/fallback) — comandos conhecidos.
@@ -678,7 +700,47 @@ class _VoiceScreenState extends State<VoiceScreen>
                 ),
               ],
 
-              const SizedBox(height: 24),
+              // Modo conversa contínua
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.forum_outlined,
+                      size: 16, color: AppColors.accent),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Conversa contínua',
+                    style: TextStyle(
+                        color: AppColors.textPrimary, fontSize: 13),
+                  ),
+                  Switch(
+                    value: _conversationMode,
+                    onChanged: (v) =>
+                        setState(() => _conversationMode = v),
+                  ),
+                ],
+              ),
+              if (_conversationMode)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.mic_off_outlined,
+                        size: 14, color: AppColors.textSecondary),
+                    const SizedBox(width: 6),
+                    const Text(
+                      'Silenciar mic enquanto ela fala',
+                      style: TextStyle(
+                          color: AppColors.textSecondary, fontSize: 12),
+                    ),
+                    Switch(
+                      value: _muteWhileSpeaking,
+                      onChanged: (v) =>
+                          setState(() => _muteWhileSpeaking = v),
+                    ),
+                  ],
+                ),
+
+              const SizedBox(height: 12),
 
               // Transcription
               if (_transcript.isNotEmpty)
