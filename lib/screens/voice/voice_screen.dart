@@ -20,10 +20,13 @@ class VoiceScreen extends StatefulWidget {
 class _VoiceScreenState extends State<VoiceScreen>
     with SingleTickerProviderStateMixin {
   final SpeechToText _speech = SpeechToText();
+  final TextEditingController _typedCtrl = TextEditingController();
   bool _available = false;
   bool _listening = false;
+  bool _processed = false;
   String _transcript = '';
   String _feedback = '';
+  String _status = '';
   late AnimationController _pulseCtrl;
 
   @override
@@ -38,54 +41,96 @@ class _VoiceScreenState extends State<VoiceScreen>
 
   Future<void> _initSpeech() async {
     _available = await _speech.initialize(
-      onError: (e) => setState(() {
-        _listening = false;
-        // 'no-speech' não é um erro real: o usuário só ficou em silêncio
-        _feedback = e.errorMsg == 'no-speech' || e.errorMsg == 'error_no_match'
-            ? 'Não ouvi nada. Toque no microfone e tente de novo.'
-            : '⚠️ Erro no microfone: ${e.errorMsg}';
-      }),
+      onError: (e) {
+        debugPrint('STT erro: ${e.errorMsg} (permanente: ${e.permanent})');
+        if (!mounted) return;
+        setState(() {
+          _listening = false;
+          // 'no-speech' não é um erro real: o usuário só ficou em silêncio
+          _feedback = e.errorMsg == 'no-speech' || e.errorMsg == 'error_no_match'
+              ? 'Não ouvi nada. Verifique se o microfone certo está '
+                  'selecionado no Windows e tente de novo.'
+              : '⚠️ Erro no microfone: ${e.errorMsg}';
+        });
+      },
+      onStatus: (status) {
+        debugPrint('STT status: $status | transcript: "$_transcript"');
+        if (!mounted) return;
+        setState(() => _status = status);
+        // No Chrome o "finalResult" às vezes nunca chega; quando o
+        // reconhecimento termina, processa o que foi capturado.
+        if (status == 'done' || status == 'notListening') {
+          if (_listening) setState(() => _listening = false);
+          if (_transcript.isNotEmpty && !_processed) {
+            _processed = true;
+            _processCommand(_transcript);
+          }
+        }
+      },
     );
+    debugPrint('STT disponível: $_available');
     setState(() {});
   }
 
   @override
   void dispose() {
     _pulseCtrl.dispose();
+    _typedCtrl.dispose();
     _speech.stop();
     super.dispose();
   }
 
   Future<void> _toggleListening() async {
     if (!_available) {
-      setState(() => _feedback = 'Microfone não disponível. Verifique as permissões.');
+      setState(() => _feedback =
+          'Microfone não disponível neste navegador. Use o campo de texto abaixo.');
       return;
     }
     if (_listening) {
       await _speech.stop();
       setState(() => _listening = false);
       // Se o usuário parou manualmente, processa o que já foi dito
-      if (_transcript.isNotEmpty) _processCommand(_transcript);
+      if (_transcript.isNotEmpty && !_processed) {
+        _processed = true;
+        _processCommand(_transcript);
+      }
     } else {
       setState(() {
         _listening = true;
+        _processed = false;
         _transcript = '';
         _feedback = 'Ouvindo...';
       });
       await _speech.listen(
         onResult: (r) {
+          debugPrint(
+              'STT resultado: "${r.recognizedWords}" (final: ${r.finalResult})');
+          if (!mounted) return;
           setState(() => _transcript = r.recognizedWords);
-          if (r.finalResult) {
+          if (r.finalResult && !_processed) {
+            _processed = true;
             _processCommand(r.recognizedWords);
             setState(() => _listening = false);
           }
         },
-        // Navegador usa hífen (pt-BR); Android/iOS usam underscore (pt_BR)
-        localeId: kIsWeb ? 'pt-BR' : 'pt_BR',
-        listenFor: const Duration(seconds: 30),
-        pauseFor: const Duration(seconds: 3),
+        listenOptions: SpeechListenOptions(
+          // Navegador usa hífen (pt-BR); Android/iOS usam underscore (pt_BR)
+          localeId: kIsWeb ? 'pt-BR' : 'pt_BR',
+          listenFor: const Duration(seconds: 30),
+          pauseFor: const Duration(seconds: 3),
+          partialResults: true,
+          cancelOnError: true,
+        ),
       );
     }
+  }
+
+  void _submitTyped() {
+    final text = _typedCtrl.text.trim();
+    if (text.isEmpty) return;
+    setState(() => _transcript = text);
+    _processCommand(text);
+    _typedCtrl.clear();
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -568,6 +613,17 @@ class _VoiceScreenState extends State<VoiceScreen>
                 ),
               ),
 
+              if (_listening) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _status == 'listening'
+                      ? '🎙️ Capturando áudio... fale agora'
+                      : 'Status: $_status',
+                  style: const TextStyle(
+                      color: AppColors.textSecondary, fontSize: 11),
+                ),
+              ],
+
               const SizedBox(height: 24),
 
               // Transcription
@@ -625,6 +681,35 @@ class _VoiceScreenState extends State<VoiceScreen>
                   ),
                 ),
               ],
+
+              const SizedBox(height: 20),
+
+              // Fallback: digitar o comando
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _typedCtrl,
+                      style: const TextStyle(
+                          color: AppColors.textPrimary, fontSize: 14),
+                      decoration: const InputDecoration(
+                        hintText: 'Ou digite seu comando aqui...',
+                        prefixIcon: Icon(Icons.keyboard_outlined,
+                            color: AppColors.textSecondary, size: 20),
+                        isDense: true,
+                      ),
+                      onSubmitted: (_) => _submitTyped(),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: _submitTyped,
+                    icon: const Icon(Icons.send_rounded,
+                        color: AppColors.primary),
+                    tooltip: 'Executar comando',
+                  ),
+                ],
+              ),
 
               const SizedBox(height: 20),
               const _CommandsHelp(),

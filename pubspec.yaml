@@ -18,7 +18,7 @@ dependencies:
   timezone: ^0.9.4
 
   # Reconhecimento de voz
-  speech_to_text: ^6.6.0
+  speech_to_text: ^7.3.0
 
   # Gerenciamento de estado
   provider: ^6.1.2
