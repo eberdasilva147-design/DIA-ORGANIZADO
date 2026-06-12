@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
 import '../providers/task_provider.dart';
 import '../providers/appointment_provider.dart';
 import '../providers/note_provider.dart';
@@ -7,9 +9,12 @@ import '../providers/verse_provider.dart';
 import '../utils/app_colors.dart';
 import 'home/home_screen.dart';
 import 'tasks/tasks_screen.dart';
+import 'tasks/task_create_modal.dart';
 import 'agenda/agenda_screen.dart';
 import 'notes/notes_screen.dart';
 import 'voice/voice_screen.dart';
+import 'settings/settings_screen.dart';
+import 'auth/login_screen.dart';
 
 class MainScaffold extends StatefulWidget {
   const MainScaffold({super.key});
@@ -59,14 +64,276 @@ class _MainScaffoldState extends State<MainScaffold> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex == 2 ? 0 : _currentIndex,
-        children: _screens,
-      ),
-      bottomNavigationBar: _buildBottomNav(),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 900;
+        final body = IndexedStack(
+          index: _currentIndex == 2 ? 0 : _currentIndex,
+          children: _screens,
+        );
+
+        if (wide) {
+          // Layout desktop: menu lateral (design Sacred Order)
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            body: Row(
+              children: [
+                _buildSidebar(),
+                Expanded(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1100),
+                      child: body,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        // Layout mobile: barra inferior
+        return Scaffold(
+          body: body,
+          bottomNavigationBar: _buildBottomNav(),
+        );
+      },
     );
   }
+
+  // ─── Sidebar (desktop) ────────────────────────────────────────────────────
+
+  Widget _buildSidebar() {
+    final auth = context.watch<AuthProvider>();
+    return Container(
+      width: 250,
+      decoration: const BoxDecoration(
+        color: AppColors.backgroundSecondary,
+        border: Border(right: BorderSide(color: AppColors.border, width: 1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const SizedBox(height: 24),
+
+          // Logo
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                const Icon(Icons.star_outline_rounded,
+                    color: AppColors.accent, size: 26),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Dia Organizado',
+                    style: GoogleFonts.notoSerif(
+                      color: AppColors.textPrimary,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      height: 1.2,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Perfil
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: AppColors.gold,
+                  child: Text(
+                    auth.userName.isNotEmpty
+                        ? auth.userName[0].toUpperCase()
+                        : '?',
+                    style: GoogleFonts.notoSerif(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        auth.userName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: AppColors.textPrimary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        'SANTUÁRIO DIGITAL',
+                        style: GoogleFonts.spaceGrotesk(
+                          color: AppColors.textSecondary,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 28),
+
+          // Navegação
+          _sideItem(0, Icons.auto_awesome_outlined, 'Início'),
+          _sideItem(1, Icons.check_circle_outline_rounded, 'Tarefas'),
+          _sideItem(3, Icons.calendar_month_outlined, 'Agenda'),
+          _sideItem(4, Icons.menu_book_outlined, 'Notas'),
+          _sideAction(Icons.mic_none_rounded, 'Comando de Voz', _openVoice),
+
+          const Spacer(),
+
+          // Botão principal
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: ElevatedButton(
+              onPressed: () => TaskCreateModal.show(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: Text(
+                'Nova Tarefa',
+                style: GoogleFonts.plusJakartaSans(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+
+          // Rodapé
+          _sideAction(Icons.settings_outlined, 'Configurações', () {
+            Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const SettingsScreen()));
+          }),
+          if (!auth.localMode)
+            _sideAction(Icons.logout_rounded, 'Sair', () async {
+              await context.read<AuthProvider>().signOut();
+              if (mounted) {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  (_) => false,
+                );
+              }
+            }),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  Widget _sideItem(int index, IconData icon, String label) {
+    final selected = _currentIndex == index;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _onTabTapped(index),
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            decoration: BoxDecoration(
+              gradient: selected
+                  ? const LinearGradient(
+                      colors: [AppColors.gold, Color(0xFFC09A1F)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    )
+                  : null,
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: AppColors.gold.withValues(alpha: 0.35),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              children: [
+                Icon(icon,
+                    size: 19,
+                    color:
+                        selected ? Colors.white : AppColors.textSecondary),
+                const SizedBox(width: 12),
+                Text(
+                  label,
+                  style: GoogleFonts.plusJakartaSans(
+                    color: selected ? Colors.white : AppColors.textPrimary,
+                    fontSize: 13.5,
+                    fontWeight:
+                        selected ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _sideAction(IconData icon, String label, VoidCallback onTap) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            child: Row(
+              children: [
+                Icon(icon, size: 19, color: AppColors.textSecondary),
+                const SizedBox(width: 12),
+                Text(
+                  label,
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppColors.textPrimary,
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─── Barra inferior (mobile) ──────────────────────────────────────────────
 
   Widget _buildBottomNav() {
     return Container(
