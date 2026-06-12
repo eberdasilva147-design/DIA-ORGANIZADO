@@ -8,7 +8,9 @@ import '../../models/appointment_model.dart';
 import '../../providers/task_provider.dart';
 import '../../providers/note_provider.dart';
 import '../../providers/appointment_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../services/ai_voice_service.dart';
 import '../../services/tts_service.dart';
 import '../../utils/app_colors.dart';
 
@@ -29,6 +31,8 @@ class _VoiceScreenState extends State<VoiceScreen>
   String _transcript = '';
   String _feedback = '';
   String _status = '';
+  String _source = ''; // 'ai' | 'basic' — origem da última resposta
+  AiVoiceService? _ai;
   late AnimationController _pulseCtrl;
 
   @override
@@ -304,12 +308,52 @@ class _VoiceScreenState extends State<VoiceScreen>
   // Comandos
   // ═══════════════════════════════════════════════════════════════════
 
-  void _processCommand(String text) {
+  /// Roteador: tenta a IA (Gemini) primeiro; se o limite gratuito diário
+  /// estourar ou a IA estiver indisponível, cai nos comandos por regras.
+  Future<void> _processCommand(String text) async {
     if (text.isEmpty) {
       _say('Nenhum comando detectado. Tente novamente.');
       return;
     }
 
+    final auth = context.read<AuthProvider>();
+    // Modo local (sem nuvem): só comandos básicos
+    if (auth.localMode) {
+      setState(() => _source = 'basic');
+      _processCommandOffline(text);
+      return;
+    }
+
+    _ai ??= AiVoiceService(
+      tasks: context.read<TaskProvider>(),
+      appointments: context.read<AppointmentProvider>(),
+      notes: context.read<NoteProvider>(),
+    );
+
+    setState(() {
+      _feedback = 'Pensando... 💭';
+      _source = 'ai';
+    });
+
+    try {
+      final reply = await _ai!.process(text);
+      if (!mounted) return;
+      _say('✅ $reply');
+    } on AiQuotaException {
+      if (!mounted) return;
+      setState(() => _source = 'basic');
+      _processCommandOffline(text);
+      setState(() => _feedback =
+          '⚠️ Limite gratuito da IA atingido hoje — usando comandos básicos.\n\n$_feedback');
+    } on AiUnavailableException {
+      if (!mounted) return;
+      setState(() => _source = 'basic');
+      _processCommandOffline(text);
+    }
+  }
+
+  /// Interpretador por regras (offline/fallback) — comandos conhecidos.
+  void _processCommandOffline(String text) {
     final lower = text.toLowerCase();
     final tasks = context.read<TaskProvider>();
     final notes = context.read<NoteProvider>();
@@ -690,6 +734,19 @@ class _VoiceScreenState extends State<VoiceScreen>
                     ),
                   ),
                 ),
+                if (_source.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      _source == 'ai'
+                          ? '✨ Respondido pela IA'
+                          : '⚙️ Comandos básicos',
+                      style: const TextStyle(
+                          color: AppColors.textSecondary, fontSize: 10),
+                    ),
+                  ),
+                ],
               ],
 
               const SizedBox(height: 20),
