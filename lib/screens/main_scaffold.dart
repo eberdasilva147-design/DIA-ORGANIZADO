@@ -71,7 +71,7 @@ class _MainScaffoldState extends State<MainScaffold> {
   Widget _buildBottomNav() {
     return Container(
       decoration: const BoxDecoration(
-        color: AppColors.backgroundSecondary,
+        color: AppColors.card,
         border: Border(top: BorderSide(color: AppColors.border, width: 1)),
       ),
       child: SafeArea(
@@ -103,14 +103,14 @@ class _MainScaffoldState extends State<MainScaffold> {
           children: [
             Icon(
               icon,
-              color: selected ? AppColors.accent : AppColors.textSecondary,
+              color: selected ? AppColors.primary : AppColors.textSecondary,
               size: 24,
             ),
             const SizedBox(height: 3),
             Text(
               label,
               style: TextStyle(
-                color: selected ? AppColors.accent : AppColors.textSecondary,
+                color: selected ? AppColors.primary : AppColors.textSecondary,
                 fontSize: 10,
                 fontWeight:
                     selected ? FontWeight.w600 : FontWeight.normal,
@@ -134,15 +134,15 @@ class _MainScaffoldState extends State<MainScaffold> {
               height: 52,
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [AppColors.primary, AppColors.accent],
+                  colors: [AppColors.gold, AppColors.primary],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.5),
-                    blurRadius: 12,
+                    color: AppColors.gold.withValues(alpha: 0.45),
+                    blurRadius: 14,
                     spreadRadius: 2,
                   ),
                 ],

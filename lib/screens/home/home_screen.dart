@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
@@ -71,50 +72,93 @@ class HomeScreen extends StatelessWidget {
             sliver: SliverList(
               delegate: SliverChildListDelegate([
                 // Saudação + data
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        AppColors.primary.withValues(alpha: 0.3),
-                        AppColors.card,
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.border),
-                  ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${_greeting()}, ${auth.userName}!',
-                        style: const TextStyle(
+                        '${_greeting()}, ${auth.userName}',
+                        style: GoogleFonts.notoSerif(
                           color: AppColors.textPrimary,
-                          fontSize: 22,
+                          fontSize: 26,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        _formattedDate(),
-                        style: const TextStyle(
-                            color: AppColors.textSecondary, fontSize: 13),
+                        _formattedDate().toUpperCase(),
+                        style: GoogleFonts.spaceGrotesk(
+                          color: AppColors.accent,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Versículo do dia — hero escuro (design Sacred Order)
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(24, 22, 24, 22),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [AppColors.heroDark, AppColors.heroDarkSoft],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.18),
+                        blurRadius: 24,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 3),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                              color: AppColors.gold.withValues(alpha: 0.6)),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          'VERSÍCULO DO DIA',
+                          style: GoogleFonts.spaceGrotesk(
+                            color: AppColors.gold,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 2,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        '"${verses.dailyVerse.versiculo}"',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.notoSerif(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontStyle: FontStyle.italic,
+                          fontWeight: FontWeight.w600,
+                          height: 1.5,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        '"${verses.dailyVerse.versiculo}"',
-                        style: const TextStyle(
-                          color: AppColors.accent,
+                        verses.dailyVerse.referencia.toUpperCase(),
+                        style: GoogleFonts.spaceGrotesk(
+                          color: AppColors.gold,
                           fontSize: 12,
-                          fontStyle: FontStyle.italic,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 3,
                         ),
-                      ),
-                      Text(
-                        '— ${verses.dailyVerse.referencia}',
-                        style: const TextStyle(
-                            color: AppColors.textSecondary, fontSize: 11),
                       ),
                     ],
                   ),
@@ -173,18 +217,29 @@ class HomeScreen extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Tarefas de hoje',
-                      style: TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    Row(
+                      children: [
+                        const Icon(Icons.push_pin_outlined,
+                            color: AppColors.gold, size: 18),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Foco de Hoje',
+                          style: GoogleFonts.notoSerif(
+                            color: AppColors.textPrimary,
+                            fontSize: 19,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ),
                     Text(
-                      '${todayTasks.length} pendente${todayTasks.length != 1 ? 's' : ''}',
-                      style: const TextStyle(
-                          color: AppColors.textSecondary, fontSize: 12),
+                      '${todayTasks.length} PENDENTE${todayTasks.length != 1 ? 'S' : ''}',
+                      style: GoogleFonts.spaceGrotesk(
+                        color: AppColors.textSecondary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1,
+                      ),
                     ),
                   ],
                 ),
@@ -227,13 +282,20 @@ class HomeScreen extends StatelessWidget {
                 // Próximos compromissos
                 if (upcomingApps.isNotEmpty) ...[
                   const SizedBox(height: 20),
-                  const Text(
-                    'Próximos compromissos',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  Row(
+                    children: [
+                      const Icon(Icons.event_outlined,
+                          color: AppColors.gold, size: 18),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Próximos compromissos',
+                        style: GoogleFonts.notoSerif(
+                          color: AppColors.textPrimary,
+                          fontSize: 19,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   ...upcomingApps

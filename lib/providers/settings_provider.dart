@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/data_service.dart';
 
 class SettingsProvider extends ChangeNotifier {
-  bool _darkMode = true;
+  bool _darkMode = false;
   bool _notifications = true;
   bool _sound = true;
   bool _recurringReminders = false;
@@ -15,7 +15,7 @@ class SettingsProvider extends ChangeNotifier {
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
-    _darkMode = prefs.getBool('darkMode') ?? true;
+    _darkMode = prefs.getBool('darkMode') ?? false;
     _notifications = prefs.getBool('notifications') ?? true;
     _sound = prefs.getBool('sound') ?? true;
     _recurringReminders = prefs.getBool('recurringReminders') ?? false;

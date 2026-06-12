@@ -23,15 +23,23 @@ class TaskCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
+        margin: const EdgeInsets.symmetric(vertical: 5),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: AppColors.card,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: overdue ? AppColors.error.withValues(alpha: 0.6) : AppColors.border,
             width: overdue ? 1.5 : 1,
           ),
+          // Sombra ambiental quente (design Sacred Order)
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.07),
+              blurRadius: 14,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Row(
           children: [
@@ -99,7 +107,7 @@ class TaskCard extends StatelessWidget {
                   height: 32,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.accent, width: 2),
+                    border: Border.all(color: AppColors.gold, width: 2),
                   ),
                   child: const Icon(Icons.check,
                       size: 18, color: AppColors.accent),

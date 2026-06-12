@@ -67,8 +67,8 @@ class _TaskCreateModalState extends State<TaskCreateModal> {
       firstDate: _selectedDate.isBefore(now) ? _selectedDate : now,
       lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
       builder: (ctx, child) => Theme(
-        data: ThemeData.dark().copyWith(
-          colorScheme: const ColorScheme.dark(primary: AppColors.accent),
+        data: ThemeData.light().copyWith(
+          colorScheme: const ColorScheme.light(primary: AppColors.primary),
         ),
         child: child!,
       ),
@@ -81,8 +81,8 @@ class _TaskCreateModalState extends State<TaskCreateModal> {
       context: context,
       initialTime: _selectedTime,
       builder: (ctx, child) => Theme(
-        data: ThemeData.dark().copyWith(
-          colorScheme: const ColorScheme.dark(primary: AppColors.accent),
+        data: ThemeData.light().copyWith(
+          colorScheme: const ColorScheme.light(primary: AppColors.primary),
         ),
         child: child!,
       ),
