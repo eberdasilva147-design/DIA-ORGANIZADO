@@ -11,12 +11,12 @@
 class SupabaseConfig {
   static const String url = String.fromEnvironment(
     'SUPABASE_URL',
-    defaultValue: 'https://SEU-PROJETO.supabase.co',
+    defaultValue: 'https://qabkevllecdlsyydtdhf.supabase.co',
   );
 
   static const String anonKey = String.fromEnvironment(
     'SUPABASE_ANON_KEY',
-    defaultValue: 'SUA_ANON_KEY',
+    defaultValue: 'sb_publishable_4QLBzvCN9XQfog7eu1nfvw_kvcK2pye',
   );
 
   /// Enquanto não configurado, o app roda em modo local (sem nuvem).

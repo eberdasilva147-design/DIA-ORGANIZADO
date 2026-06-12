@@ -7,14 +7,8 @@ RUN flutter pub get
 
 COPY . .
 
-# O Railway injeta variáveis do serviço como build args quando declaradas.
-# Se não existirem, o app roda em modo local (sem login/nuvem).
-ARG SUPABASE_URL=""
-ARG SUPABASE_ANON_KEY=""
-
-RUN flutter build web --release \
-    --dart-define=SUPABASE_URL=$SUPABASE_URL \
-    --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY
+# As chaves do Supabase (públicas) já estão em lib/supabase_config.dart
+RUN flutter build web --release
 
 # ─── Estágio 2: servidor estático (nginx) ────────────────────────────
 FROM nginx:alpine
