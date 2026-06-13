@@ -1,10 +1,72 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../models/task_model.dart';
 import '../../providers/task_provider.dart';
 import '../../utils/app_colors.dart';
 import '../../widgets/task_card.dart';
 import 'task_create_modal.dart';
+
+/// Reagenda uma tarefa: escolhe nova data e horário e atualiza.
+Future<void> rescheduleTaskFlow(BuildContext context, TaskModel task) async {
+  final now = DateTime.now();
+  final initial = task.dateTime ?? now;
+  final firstDate = initial.isBefore(now) ? now : initial;
+  final d = await showDatePicker(
+    context: context,
+    initialDate: firstDate,
+    firstDate: now.subtract(const Duration(days: 1)),
+    lastDate: now.add(const Duration(days: 365 * 2)),
+    builder: (ctx, child) => Theme(
+      data: ThemeData.light().copyWith(
+        colorScheme: const ColorScheme.light(primary: AppColors.primary),
+      ),
+      child: child!,
+    ),
+  );
+  if (d == null || !context.mounted) return;
+  final t = await showTimePicker(
+    context: context,
+    initialTime: TimeOfDay(hour: initial.hour, minute: initial.minute),
+    builder: (ctx, child) => Theme(
+      data: ThemeData.light().copyWith(
+        colorScheme: const ColorScheme.light(primary: AppColors.primary),
+      ),
+      child: child!,
+    ),
+  );
+  if (t == null || !context.mounted) return;
+  final data = DateFormat('dd/MM/yyyy').format(d);
+  final horario =
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+  await context.read<TaskProvider>().rescheduleTask(task.id, data, horario);
+}
+
+/// Pede confirmação antes de excluir uma tarefa.
+Future<void> confirmDeleteTask(BuildContext context, TaskModel task) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (_) => AlertDialog(
+      backgroundColor: AppColors.card,
+      title: const Text('Excluir tarefa',
+          style: TextStyle(color: AppColors.textPrimary)),
+      content: Text('Excluir "${task.nome}"? Esta ação não pode ser desfeita.',
+          style: const TextStyle(color: AppColors.textSecondary)),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar')),
+        TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Excluir',
+                style: TextStyle(color: AppColors.error))),
+      ],
+    ),
+  );
+  if (ok == true && context.mounted) {
+    await context.read<TaskProvider>().deleteTask(task.id);
+  }
+}
 
 class TasksScreen extends StatelessWidget {
   const TasksScreen({super.key});
@@ -76,6 +138,7 @@ class _PendingTasksList extends StatelessWidget {
         onComplete: () =>
             context.read<TaskProvider>().completeTask(tasks[i].id),
         onTap: () => _showOptions(context, tasks[i]),
+        onReschedule: () => rescheduleTaskFlow(context, tasks[i]),
       ),
     );
   }
@@ -142,6 +205,7 @@ class _CompletedTasksList extends StatelessWidget {
       itemBuilder: (_, i) => TaskCard(
         task: tasks[i],
         onComplete: () {},
+        onDelete: () => confirmDeleteTask(context, tasks[i]),
       ),
     );
   }

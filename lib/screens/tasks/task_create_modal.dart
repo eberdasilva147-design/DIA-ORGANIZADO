@@ -29,10 +29,23 @@ class TaskCreateModal extends StatefulWidget {
 
 class _TaskCreateModalState extends State<TaskCreateModal> {
   final _nameCtrl = TextEditingController();
+  final _obsCtrl = TextEditingController();
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
   String _priority = 'm';
   bool _reminder = false;
+  int _lembreteMinAntes = 0; // antecedência do lembrete (minutos)
+
+  // Opções de antecedência (minutos → rótulo)
+  static const Map<int, String> _antecedencias = {
+    0: 'No horário',
+    5: '5 minutos antes',
+    15: '15 minutos antes',
+    30: '30 minutos antes',
+    60: '1 hora antes',
+    120: '2 horas antes',
+    1440: '1 dia antes',
+  };
 
   bool get _isEditing => widget.task != null;
 
@@ -42,8 +55,10 @@ class _TaskCreateModalState extends State<TaskCreateModal> {
     final task = widget.task;
     if (task != null) {
       _nameCtrl.text = task.nome;
+      _obsCtrl.text = task.observacao;
       _priority = task.prioridade;
       _reminder = task.lembrete;
+      _lembreteMinAntes = task.lembreteMinAntes;
       final dt = task.dateTime;
       if (dt != null) {
         _selectedDate = dt;
@@ -55,7 +70,77 @@ class _TaskCreateModalState extends State<TaskCreateModal> {
   @override
   void dispose() {
     _nameCtrl.dispose();
+    _obsCtrl.dispose();
     super.dispose();
+  }
+
+  String _antecedenciaLabel(int min) =>
+      _antecedencias[min] ?? '$min minutos antes';
+
+  Future<void> _pickAntecedencia() async {
+    final escolha = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: AppColors.card,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final e in _antecedencias.entries)
+              ListTile(
+                title: Text(e.value,
+                    style: const TextStyle(color: AppColors.textPrimary)),
+                trailing: _lembreteMinAntes == e.key
+                    ? const Icon(Icons.check, color: AppColors.gold)
+                    : null,
+                onTap: () => Navigator.pop(context, e.key),
+              ),
+            ListTile(
+              title: const Text('Personalizado…',
+                  style: TextStyle(color: AppColors.accent)),
+              onTap: () => Navigator.pop(context, -1),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (escolha == null) return;
+    if (escolha == -1) {
+      await _pickCustomAntecedencia();
+    } else {
+      setState(() => _lembreteMinAntes = escolha);
+    }
+  }
+
+  Future<void> _pickCustomAntecedencia() async {
+    final ctrl = TextEditingController(
+        text: _lembreteMinAntes > 0 ? '$_lembreteMinAntes' : '');
+    final min = await showDialog<int>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: const Text('Antecedência (minutos)',
+            style: TextStyle(color: AppColors.textPrimary)),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          style: const TextStyle(color: AppColors.textPrimary),
+          decoration: const InputDecoration(hintText: 'Ex.: 45'),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar')),
+          TextButton(
+              onPressed: () =>
+                  Navigator.pop(context, int.tryParse(ctrl.text.trim())),
+              child: const Text('OK')),
+        ],
+      ),
+    );
+    if (min != null && min >= 0) setState(() => _lembreteMinAntes = min);
   }
 
   Future<void> _pickDate() async {
@@ -103,6 +188,8 @@ class _TaskCreateModalState extends State<TaskCreateModal> {
         horario: horario,
         prioridade: _priority,
         lembrete: _reminder,
+        observacao: _obsCtrl.text.trim(),
+        lembreteMinAntes: _lembreteMinAntes,
         atrasada: false,
       ));
     } else {
@@ -112,6 +199,8 @@ class _TaskCreateModalState extends State<TaskCreateModal> {
         horario: horario,
         prioridade: _priority,
         lembrete: _reminder,
+        observacao: _obsCtrl.text.trim(),
+        lembreteMinAntes: _lembreteMinAntes,
       );
     }
     if (mounted) Navigator.pop(context);
@@ -156,6 +245,18 @@ class _TaskCreateModalState extends State<TaskCreateModal> {
                 hintText: 'Nome da tarefa',
                 prefixIcon:
                     Icon(Icons.task_alt, color: AppColors.textSecondary),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _obsCtrl,
+              minLines: 1,
+              maxLines: 3,
+              style: const TextStyle(color: AppColors.textPrimary),
+              decoration: const InputDecoration(
+                hintText: 'Observação (opcional)',
+                prefixIcon:
+                    Icon(Icons.notes_rounded, color: AppColors.textSecondary),
               ),
             ),
             const SizedBox(height: 12),
@@ -242,6 +343,41 @@ class _TaskCreateModalState extends State<TaskCreateModal> {
                 ),
               ],
             ),
+            if (_reminder) ...[
+              const SizedBox(height: 4),
+              GestureDetector(
+                onTap: _pickAntecedencia,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: AppColors.card,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.notifications_active_outlined,
+                          size: 16, color: AppColors.textSecondary),
+                      const SizedBox(width: 8),
+                      const Text('Avisar:',
+                          style: TextStyle(
+                              color: AppColors.textSecondary, fontSize: 14)),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _antecedenciaLabel(_lembreteMinAntes),
+                          style: const TextStyle(
+                              color: AppColors.textPrimary, fontSize: 14),
+                        ),
+                      ),
+                      const Icon(Icons.arrow_drop_down,
+                          color: AppColors.textSecondary),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _save,
