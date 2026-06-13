@@ -1,22 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../models/appointment_model.dart';
 import '../../providers/appointment_provider.dart';
 import '../../utils/app_colors.dart';
 
 class AppointmentCreateModal extends StatefulWidget {
   final DateTime initialDate;
 
-  const AppointmentCreateModal({super.key, required this.initialDate});
+  /// Se informado, abre em modo edição.
+  final AppointmentModel? appointment;
 
-  static Future<void> show(BuildContext context, DateTime date) {
+  const AppointmentCreateModal(
+      {super.key, required this.initialDate, this.appointment});
+
+  static Future<void> show(BuildContext context, DateTime date,
+      {AppointmentModel? appointment}) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => ChangeNotifierProvider.value(
         value: context.read<AppointmentProvider>(),
-        child: AppointmentCreateModal(initialDate: date),
+        child: AppointmentCreateModal(
+            initialDate: date, appointment: appointment),
       ),
     );
   }
@@ -30,11 +37,26 @@ class _State extends State<AppointmentCreateModal> {
   final _localCtrl = TextEditingController();
   late DateTime _selectedDate;
   TimeOfDay _selectedTime = const TimeOfDay(hour: 9, minute: 0);
+  bool _confirmado = false;
+
+  bool get _isEditing => widget.appointment != null;
 
   @override
   void initState() {
     super.initState();
     _selectedDate = widget.initialDate;
+    final ap = widget.appointment;
+    if (ap != null) {
+      _titleCtrl.text = ap.titulo;
+      _localCtrl.text = ap.local;
+      _selectedDate = ap.date;
+      _confirmado = ap.confirmado;
+      final hm = ap.horario.split(':');
+      if (hm.length == 2) {
+        _selectedTime = TimeOfDay(
+            hour: int.tryParse(hm[0]) ?? 9, minute: int.tryParse(hm[1]) ?? 0);
+      }
+    }
   }
 
   @override
@@ -51,8 +73,8 @@ class _State extends State<AppointmentCreateModal> {
       firstDate: DateTime.now().subtract(const Duration(days: 365)),
       lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
       builder: (ctx, child) => Theme(
-        data: ThemeData.dark()
-            .copyWith(colorScheme: const ColorScheme.dark(primary: AppColors.accent)),
+        data: ThemeData.light()
+            .copyWith(colorScheme: const ColorScheme.light(primary: AppColors.primary)),
         child: child!,
       ),
     );
@@ -64,8 +86,8 @@ class _State extends State<AppointmentCreateModal> {
       context: context,
       initialTime: _selectedTime,
       builder: (ctx, child) => Theme(
-        data: ThemeData.dark()
-            .copyWith(colorScheme: const ColorScheme.dark(primary: AppColors.accent)),
+        data: ThemeData.light()
+            .copyWith(colorScheme: const ColorScheme.light(primary: AppColors.primary)),
         child: child!,
       ),
     );
@@ -76,12 +98,25 @@ class _State extends State<AppointmentCreateModal> {
     if (_titleCtrl.text.trim().isEmpty) return;
     final horario =
         '${_selectedTime.hour.toString().padLeft(2, '0')}:${_selectedTime.minute.toString().padLeft(2, '0')}';
-    await context.read<AppointmentProvider>().addAppointment(
-          titulo: _titleCtrl.text.trim(),
-          horario: horario,
-          local: _localCtrl.text.trim(),
-          date: _selectedDate,
-        );
+    final provider = context.read<AppointmentProvider>();
+    if (_isEditing) {
+      await provider.updateAppointment(widget.appointment!.copyWith(
+        titulo: _titleCtrl.text.trim(),
+        horario: horario,
+        local: _localCtrl.text.trim(),
+        dia: _selectedDate.day,
+        mes: _selectedDate.month,
+        ano: _selectedDate.year,
+        confirmado: _confirmado,
+      ));
+    } else {
+      await provider.addAppointment(
+        titulo: _titleCtrl.text.trim(),
+        horario: horario,
+        local: _localCtrl.text.trim(),
+        date: _selectedDate,
+      );
+    }
     if (mounted) Navigator.pop(context);
   }
 
@@ -109,8 +144,8 @@ class _State extends State<AppointmentCreateModal> {
               ),
             ),
             const SizedBox(height: 16),
-            const Text('Novo Compromisso',
-                style: TextStyle(
+            Text(_isEditing ? 'Editar Compromisso' : 'Novo Compromisso',
+                style: const TextStyle(
                     color: AppColors.textPrimary,
                     fontSize: 18,
                     fontWeight: FontWeight.w700)),
@@ -191,12 +226,28 @@ class _State extends State<AppointmentCreateModal> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.verified_outlined,
+                    size: 18, color: AppColors.textSecondary),
+                const SizedBox(width: 8),
+                const Text('Confirmado',
+                    style: TextStyle(color: AppColors.textPrimary)),
+                const Spacer(),
+                Switch(
+                  value: _confirmado,
+                  onChanged: (v) => setState(() => _confirmado = v),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             ElevatedButton(
               onPressed: _save,
               style: ElevatedButton.styleFrom(
                   minimumSize: const Size.fromHeight(48)),
-              child: const Text('Salvar compromisso'),
+              child: Text(
+                  _isEditing ? 'Salvar alterações' : 'Salvar compromisso'),
             ),
           ],
         ),

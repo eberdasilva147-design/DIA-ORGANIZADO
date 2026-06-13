@@ -5,27 +5,52 @@ import '../utils/app_colors.dart';
 class AppointmentCard extends StatelessWidget {
   final AppointmentModel appointment;
   final VoidCallback? onDelete;
+  final VoidCallback? onEdit;
+  final VoidCallback? onReschedule;
 
-  const AppointmentCard(
-      {super.key, required this.appointment, this.onDelete});
+  const AppointmentCard({
+    super.key,
+    required this.appointment,
+    this.onDelete,
+    this.onEdit,
+    this.onReschedule,
+  });
+
+  // 🔴 atrasado · 🔵 hoje · 🟢 confirmado · 🟡 pendente
+  static const _statusColors = {
+    'atrasado': AppColors.error,
+    'hoje': AppColors.celestial,
+    'confirmado': AppColors.success,
+    'pendente': AppColors.priorityMedium,
+  };
+  static const _statusLabels = {
+    'atrasado': 'Atrasado',
+    'hoje': 'Hoje',
+    'confirmado': 'Confirmado',
+    'pendente': 'Pendente',
+  };
 
   @override
   Widget build(BuildContext context) {
+    final status = appointment.statusKind;
+    final statusColor = _statusColors[status] ?? AppColors.accent;
+
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.4)),
+        border: Border.all(color: statusColor.withValues(alpha: 0.45)),
       ),
       child: Row(
         children: [
+          // Faixa de status (cor por estado)
           Container(
             width: 4,
-            height: 48,
+            height: 52,
             decoration: BoxDecoration(
-              color: AppColors.accent,
+              color: statusColor,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -67,20 +92,67 @@ class AppointmentCard extends StatelessWidget {
                     ],
                   ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  appointment.dateFormatted,
-                  style: const TextStyle(
-                      color: AppColors.accent, fontSize: 11),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Text(
+                      appointment.dateFormatted,
+                      style: const TextStyle(
+                          color: AppColors.accent, fontSize: 11),
+                    ),
+                    const SizedBox(width: 8),
+                    // Etiqueta de status
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        _statusLabels[status] ?? '',
+                        style: TextStyle(
+                            color: statusColor,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-          if (onDelete != null)
-            IconButton(
-              icon: const Icon(Icons.delete_outline,
+          // Menu de ações
+          if (onEdit != null || onReschedule != null || onDelete != null)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert,
                   color: AppColors.textSecondary, size: 20),
-              onPressed: onDelete,
+              color: AppColors.card,
+              onSelected: (v) {
+                if (v == 'editar') onEdit?.call();
+                if (v == 'reagendar') onReschedule?.call();
+                if (v == 'excluir') onDelete?.call();
+              },
+              itemBuilder: (_) => [
+                if (onEdit != null)
+                  const PopupMenuItem(
+                    value: 'editar',
+                    child: Text('Editar',
+                        style: TextStyle(color: AppColors.textPrimary)),
+                  ),
+                if (onReschedule != null)
+                  const PopupMenuItem(
+                    value: 'reagendar',
+                    child: Text('Reagendar',
+                        style: TextStyle(color: AppColors.textPrimary)),
+                  ),
+                if (onDelete != null)
+                  const PopupMenuItem(
+                    value: 'excluir',
+                    child: Text('Excluir',
+                        style: TextStyle(color: AppColors.error)),
+                  ),
+              ],
             ),
         ],
       ),

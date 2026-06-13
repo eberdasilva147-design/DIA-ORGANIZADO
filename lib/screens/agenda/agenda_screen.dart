@@ -1,10 +1,72 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../models/appointment_model.dart';
 import '../../providers/appointment_provider.dart';
 import '../../utils/app_colors.dart';
 import '../../widgets/appointment_card.dart';
 import 'appointment_create_modal.dart';
+
+/// Pede confirmação antes de excluir um compromisso.
+Future<void> confirmDeleteAppointment(
+    BuildContext context, AppointmentModel ap) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (_) => AlertDialog(
+      backgroundColor: AppColors.card,
+      title: const Text('Excluir compromisso',
+          style: TextStyle(color: AppColors.textPrimary)),
+      content: Text('Excluir "${ap.titulo}"?',
+          style: const TextStyle(color: AppColors.textSecondary)),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar')),
+        TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Excluir',
+                style: TextStyle(color: AppColors.error))),
+      ],
+    ),
+  );
+  if (ok == true && context.mounted) {
+    await context.read<AppointmentProvider>().deleteAppointment(ap.id);
+  }
+}
+
+/// Reagenda um compromisso (nova data + horário).
+Future<void> rescheduleAppointmentFlow(
+    BuildContext context, AppointmentModel ap) async {
+  final now = DateTime.now();
+  final d = await showDatePicker(
+    context: context,
+    initialDate: ap.date.isBefore(now) ? now : ap.date,
+    firstDate: now.subtract(const Duration(days: 1)),
+    lastDate: now.add(const Duration(days: 365 * 2)),
+    builder: (ctx, child) => Theme(
+      data: ThemeData.light().copyWith(
+          colorScheme: const ColorScheme.light(primary: AppColors.primary)),
+      child: child!,
+    ),
+  );
+  if (d == null || !context.mounted) return;
+  final hm = ap.horario.split(':');
+  final t = await showTimePicker(
+    context: context,
+    initialTime: TimeOfDay(
+        hour: int.tryParse(hm.isNotEmpty ? hm[0] : '9') ?? 9,
+        minute: int.tryParse(hm.length > 1 ? hm[1] : '0') ?? 0),
+    builder: (ctx, child) => Theme(
+      data: ThemeData.light().copyWith(
+          colorScheme: const ColorScheme.light(primary: AppColors.primary)),
+      child: child!,
+    ),
+  );
+  if (t == null || !context.mounted) return;
+  final horario =
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+  await context.read<AppointmentProvider>().reschedule(ap.id, d, horario);
+}
 
 class AgendaScreen extends StatefulWidget {
   const AgendaScreen({super.key});
@@ -198,9 +260,13 @@ class _WeekView extends StatelessWidget {
                   itemCount: dayAps.length,
                   itemBuilder: (_, i) => AppointmentCard(
                     appointment: dayAps[i],
-                    onDelete: () => context
-                        .read<AppointmentProvider>()
-                        .deleteAppointment(dayAps[i].id),
+                    onDelete: () =>
+                        confirmDeleteAppointment(context, dayAps[i]),
+                    onEdit: () => AppointmentCreateModal.show(
+                        context, dayAps[i].date,
+                        appointment: dayAps[i]),
+                    onReschedule: () =>
+                        rescheduleAppointmentFlow(context, dayAps[i]),
                   ),
                 ),
         ),
@@ -290,8 +356,20 @@ class _MonthView extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        // Grid
-        Padding(
+        // Grid (deslize para trocar de mês)
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragEnd: (dr) {
+            final v = dr.primaryVelocity ?? 0;
+            if (v < -100) {
+              onMonthChange(
+                  DateTime(currentMonth.year, currentMonth.month + 1));
+            } else if (v > 100) {
+              onMonthChange(
+                  DateTime(currentMonth.year, currentMonth.month - 1));
+            }
+          },
+          child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8),
           child: GridView.builder(
             shrinkWrap: true,
@@ -352,6 +430,7 @@ class _MonthView extends StatelessWidget {
               );
             },
           ),
+          ),
         ),
         const Divider(height: 20),
         // Selected day appointments
@@ -365,9 +444,13 @@ class _MonthView extends StatelessWidget {
                   itemCount: dayAps.length,
                   itemBuilder: (_, i) => AppointmentCard(
                     appointment: dayAps[i],
-                    onDelete: () => context
-                        .read<AppointmentProvider>()
-                        .deleteAppointment(dayAps[i].id),
+                    onDelete: () =>
+                        confirmDeleteAppointment(context, dayAps[i]),
+                    onEdit: () => AppointmentCreateModal.show(
+                        context, dayAps[i].date,
+                        appointment: dayAps[i]),
+                    onReschedule: () =>
+                        rescheduleAppointmentFlow(context, dayAps[i]),
                   ),
                 ),
         ),
