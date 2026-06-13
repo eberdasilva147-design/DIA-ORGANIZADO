@@ -11,6 +11,17 @@ class AiQuotaException implements Exception {}
 /// IA indisponível (rede, erro do servidor, não configurada).
 class AiUnavailableException implements Exception {}
 
+/// Resultado de uma rodada de conversa com a IA.
+class AiResult {
+  final String reply;
+
+  /// true = tarefa concluída/pergunta respondida (microfone pode desligar).
+  /// false = aguardando confirmação ou esclarecimento (continua ouvindo).
+  final bool conversationDone;
+
+  AiResult(this.reply, this.conversationDone);
+}
+
 /// Conversa com a IA (Gemini via Edge Function "ai-voice") e executa
 /// as ações que ela decidir nos providers do app.
 class AiVoiceService {
@@ -30,8 +41,8 @@ class AiVoiceService {
   void resetConversation() => _history.clear();
 
   /// Envia a fala do usuário para a IA, executa as ações retornadas
-  /// e devolve a resposta para ser falada/exibida.
-  Future<String> process(String message) async {
+  /// (presentes só após confirmação) e devolve a resposta + estado.
+  Future<AiResult> process(String message) async {
     final context = _buildContext();
 
     Map<String, dynamic> data;
@@ -54,6 +65,7 @@ class AiVoiceService {
 
     final reply = (data['reply'] as String?)?.trim() ?? '';
     final actions = (data['actions'] as List?) ?? const [];
+    final done = (data['conversation_done'] as bool?) ?? true;
 
     for (final raw in actions) {
       try {
@@ -70,7 +82,7 @@ class AiVoiceService {
       _history.removeAt(0);
     }
 
-    return reply.isEmpty ? 'Feito!' : reply;
+    return AiResult(reply.isEmpty ? 'Feito!' : reply, done);
   }
 
   // ─── Contexto enviado à IA ──────────────────────────────────────────
@@ -110,11 +122,20 @@ class AiVoiceService {
   Future<void> _execute(Map<String, dynamic> a) async {
     switch (a['type'] as String?) {
       case 'create_task':
+        final tNome = (a['nome'] as String?) ?? 'Nova tarefa';
+        final tData = (a['data'] as String?) ??
+            DateFormat('dd/MM/yyyy').format(DateTime.now());
+        final tHora = (a['horario'] as String?) ?? '08:00';
+        // Guarda anti-duplicidade: não recria tarefa idêntica
+        final dupT = tasks.tasks.any((t) =>
+            t.nome.toLowerCase() == tNome.toLowerCase() &&
+            t.data == tData &&
+            t.horario == tHora);
+        if (dupT) break;
         await tasks.addTask(
-          nome: (a['nome'] as String?) ?? 'Nova tarefa',
-          data: (a['data'] as String?) ??
-              DateFormat('dd/MM/yyyy').format(DateTime.now()),
-          horario: (a['horario'] as String?) ?? '08:00',
+          nome: tNome,
+          data: tData,
+          horario: tHora,
           prioridade: (a['prioridade'] as String?) ?? 'm',
           lembrete: (a['lembrete'] as bool?) ?? true,
         );
@@ -137,10 +158,18 @@ class AiVoiceService {
       case 'create_appointment':
         final dataStr = (a['data'] as String?) ??
             DateFormat('dd/MM/yyyy').format(DateTime.now());
+        final apTitulo = (a['titulo'] as String?) ?? 'Compromisso';
+        final apHora = (a['horario'] as String?) ?? '08:00';
+        // Guarda anti-duplicidade: não recria compromisso idêntico
+        final dupA = appointments.appointments.any((ap) =>
+            ap.titulo.toLowerCase() == apTitulo.toLowerCase() &&
+            ap.dateFormatted == dataStr &&
+            ap.horario == apHora);
+        if (dupA) break;
         final parts = dataStr.split('/');
         await appointments.addAppointment(
-          titulo: (a['titulo'] as String?) ?? 'Compromisso',
-          horario: (a['horario'] as String?) ?? '08:00',
+          titulo: apTitulo,
+          horario: apHora,
           local: (a['local'] as String?) ?? '',
           date: DateTime(
             int.parse(parts[2]),

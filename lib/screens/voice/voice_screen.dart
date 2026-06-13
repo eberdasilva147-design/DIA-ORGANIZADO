@@ -137,7 +137,8 @@ class _VoiceScreenState extends State<VoiceScreen>
         // Navegador usa hífen (pt-BR); Android/iOS usam underscore (pt_BR)
         localeId: kIsWeb ? 'pt-BR' : 'pt_BR',
         listenFor: const Duration(seconds: 30),
-        pauseFor: const Duration(seconds: 2),
+        // 3s de silêncio: não corta o usuário no meio do raciocínio
+        pauseFor: const Duration(seconds: 3),
         partialResults: true,
         cancelOnError: true,
       ),
@@ -331,20 +332,35 @@ class _VoiceScreenState extends State<VoiceScreen>
 
   /// Mostra a resposta na tela, fala em voz alta e — em conversa contínua —
   /// reabre o microfone quando a fala termina.
-  void _say(String msg) {
+  void _say(String msg, {bool keepListening = false}) {
     if (!mounted) return;
     setState(() => _feedback = msg);
-    _speakThenRelisten(msg);
+    _speakThen(msg, keepListening);
   }
 
-  Future<void> _speakThenRelisten(String msg) async {
+  Future<void> _speakThen(String msg, bool keepListening) async {
     final sound = context.read<SettingsProvider>().sound;
     if (sound) {
       // speak() completa quando a fala termina (mic já parado, sem eco)
       await TtsService().speak(msg);
     }
     if (!mounted) return;
-    _scheduleRelisten();
+    if (keepListening) {
+      _scheduleRelisten();
+    } else {
+      // Tarefa concluída: desativa o microfone automaticamente
+      setState(() {
+        _conversationActive = false;
+        _paused = false;
+        _listening = false;
+      });
+    }
+  }
+
+  Color get _feedbackColor {
+    if (_feedback.startsWith('✅')) return AppColors.success;
+    if (_feedback.startsWith('⚠️')) return AppColors.warning;
+    return AppColors.accent; // perguntas / "Pensando..."
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -379,9 +395,11 @@ class _VoiceScreenState extends State<VoiceScreen>
     });
 
     try {
-      final reply = await _ai!.process(text);
+      final result = await _ai!.process(text);
       if (!mounted) return;
-      _say('✅ $reply');
+      // conclusão → mic desliga; pergunta/confirmação → continua ouvindo
+      _say(result.conversationDone ? '✅ ${result.reply}' : result.reply,
+          keepListening: !result.conversationDone);
     } on AiQuotaException {
       if (!mounted) return;
       setState(() => _source = 'basic');
@@ -732,58 +750,22 @@ class _VoiceScreenState extends State<VoiceScreen>
 
               const SizedBox(height: 16),
 
-              // Transcription
-              if (_transcript.isNotEmpty)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppColors.card,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Você disse:',
-                          style: TextStyle(
-                              color: AppColors.textSecondary, fontSize: 11)),
-                      const SizedBox(height: 4),
-                      Text(
-                        '"$_transcript"',
-                        style: const TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 15,
-                            fontStyle: FontStyle.italic),
-                      ),
-                    ],
-                  ),
-                ),
-
+              // (Transcrição de voz não é mais exibida — interface limpa)
               if (_feedback.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: _feedback.startsWith('✅')
-                        ? AppColors.success.withValues(alpha: 0.1)
-                        : AppColors.warning.withValues(alpha: 0.1),
+                    color: _feedbackColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: _feedback.startsWith('✅')
-                          ? AppColors.success.withValues(alpha: 0.4)
-                          : AppColors.warning.withValues(alpha: 0.4),
+                      color: _feedbackColor.withValues(alpha: 0.4),
                     ),
                   ),
                   child: Text(
                     _feedback,
-                    style: TextStyle(
-                      color: _feedback.startsWith('✅')
-                          ? AppColors.success
-                          : AppColors.warning,
-                      fontSize: 13,
-                    ),
+                    style: TextStyle(color: _feedbackColor, fontSize: 14),
                   ),
                 ),
                 if (_source.isNotEmpty) ...[
