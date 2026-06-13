@@ -17,6 +17,9 @@ create table if not exists public.tarefas (
   concluida boolean not null default false,
   atrasada boolean not null default false,
   lembrete boolean not null default false,
+  observacao text default '',
+  lembrete_min_antes integer default 0,
+  ocultar_da_home boolean default false,
   created_at timestamptz not null default now()
 );
 
@@ -38,6 +41,8 @@ create table if not exists public.compromissos (
   dia integer not null,
   mes integer not null,
   ano integer not null,
+  ocultar_da_home boolean default false,
+  confirmado boolean default false,
   created_at timestamptz not null default now()
 );
 

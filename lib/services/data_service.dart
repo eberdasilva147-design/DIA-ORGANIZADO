@@ -19,6 +19,7 @@ abstract class DataService {
   // Compromissos
   Stream<List<AppointmentModel>> streamAppointments();
   Future<void> addAppointment(AppointmentModel appointment);
+  Future<void> updateAppointment(AppointmentModel appointment);
   Future<void> deleteAppointment(String id);
 
   // Notas

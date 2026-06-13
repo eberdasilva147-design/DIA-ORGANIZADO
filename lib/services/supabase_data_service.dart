@@ -64,6 +64,12 @@ class SupabaseDataService implements DataService {
       .insert(_withUser(appointment.toMap()..['id'] = appointment.id));
 
   @override
+  Future<void> updateAppointment(AppointmentModel appointment) => _db
+      .from('compromissos')
+      .update(appointment.toMap())
+      .eq('id', appointment.id);
+
+  @override
   Future<void> deleteAppointment(String id) =>
       _db.from('compromissos').delete().eq('id', id);
 

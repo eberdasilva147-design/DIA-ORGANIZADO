@@ -56,6 +56,8 @@ class TaskProvider extends ChangeNotifier {
     required String horario,
     required String prioridade,
     bool lembrete = false,
+    String observacao = '',
+    int lembreteMinAntes = 0,
   }) async {
     final task = TaskModel(
       id: const Uuid().v4(),
@@ -64,6 +66,8 @@ class TaskProvider extends ChangeNotifier {
       horario: horario,
       prioridade: prioridade,
       lembrete: lembrete,
+      observacao: observacao,
+      lembreteMinAntes: lembreteMinAntes,
     );
     await DataService.instance.addTask(task);
     await _scheduleReminder(task);
@@ -99,14 +103,18 @@ class TaskProvider extends ChangeNotifier {
   Future<void> _scheduleReminder(TaskModel task) async {
     final notifId = _notificationId(task.id);
     await NotificationService().cancelNotification(notifId);
-    final dt = task.dateTime;
+    // Dispara na antecedência escolhida (horário − lembreteMinAntes)
+    final dt = task.lembreteDateTime;
     if (!task.lembrete || task.concluida || dt == null || !dt.isAfter(DateTime.now())) {
       return;
     }
+    final quando = task.lembreteMinAntes > 0
+        ? ' (lembrete ${task.lembreteMinAntes} min antes)'
+        : '';
     await NotificationService().scheduleTaskNotification(
       id: notifId,
       title: '⏰ Lembrete',
-      body: '${task.nome} — ${task.horario}',
+      body: '${task.nome} — ${task.horario}$quando',
       scheduledDate: dt,
     );
   }

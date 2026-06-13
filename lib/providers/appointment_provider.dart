@@ -45,6 +45,33 @@ class AppointmentProvider extends ChangeNotifier {
     await DataService.instance.addAppointment(ap);
   }
 
+  Future<void> updateAppointment(AppointmentModel ap) async {
+    await DataService.instance.updateAppointment(ap);
+  }
+
+  /// Reagenda um compromisso para nova data/horário.
+  Future<void> reschedule(String id, DateTime date, String horario) async {
+    final ap = _appointments.firstWhere((a) => a.id == id);
+    await updateAppointment(ap.copyWith(
+      dia: date.day,
+      mes: date.month,
+      ano: date.year,
+      horario: horario,
+    ));
+  }
+
+  /// Mostra/oculta o compromisso da Home (continua na Agenda).
+  Future<void> toggleOcultarDaHome(String id) async {
+    final ap = _appointments.firstWhere((a) => a.id == id);
+    await updateAppointment(ap.copyWith(ocultarDaHome: !ap.ocultarDaHome));
+  }
+
+  /// Alterna confirmado/pendente (indicador 🟢/🟡).
+  Future<void> toggleConfirmado(String id) async {
+    final ap = _appointments.firstWhere((a) => a.id == id);
+    await updateAppointment(ap.copyWith(confirmado: !ap.confirmado));
+  }
+
   Future<void> deleteAppointment(String id) async {
     await DataService.instance.deleteAppointment(id);
   }

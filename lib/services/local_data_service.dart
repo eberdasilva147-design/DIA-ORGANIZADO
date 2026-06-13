@@ -132,6 +132,13 @@ class LocalDataService implements DataService {
   }
 
   @override
+  Future<void> updateAppointment(AppointmentModel appointment) async {
+    final i = _appointments.indexWhere((a) => a.id == appointment.id);
+    if (i >= 0) _appointments[i] = appointment;
+    await _saveAppointments();
+  }
+
+  @override
   Future<void> deleteAppointment(String id) async {
     _appointments.removeWhere((a) => a.id == id);
     await _saveAppointments();
