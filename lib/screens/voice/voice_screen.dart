@@ -17,6 +17,17 @@ import '../../utils/app_colors.dart';
 /// Estado atual do ciclo de conversa (indicador visual).
 enum _VoicePhase { idle, listening, processing, responding }
 
+/// Ação proposta pelo interpretador offline, aguardando confirmação do usuário.
+/// Garante que nada é salvo sem o "sim" — e nada é perdido.
+class _PendingAction {
+  final String kind; // create_task | create_appointment | create_note
+  //                    | complete | delete | reschedule | cancel_appointment
+  final Map<String, dynamic> data;
+  final String summary; // texto curto exibido ao confirmar
+
+  _PendingAction(this.kind, this.data, this.summary);
+}
+
 class VoiceScreen extends StatefulWidget {
   const VoiceScreen({super.key});
 
@@ -39,6 +50,8 @@ class _VoiceScreenState extends State<VoiceScreen>
   bool _paused = false; // usuário tocou no ícone 🔇
   _VoicePhase _phase = _VoicePhase.idle;
   int _silentCycles = 0; // ciclos seguidos sem fala → inatividade
+  _PendingAction? _pending; // ação offline aguardando confirmação
+  bool _aiExhausted = false; // limite da IA estourou → fica no modo offline
   late AnimationController _pulseCtrl;
 
   @override
@@ -414,9 +427,15 @@ class _VoiceScreenState extends State<VoiceScreen>
 
     if (mounted) setState(() => _phase = _VoicePhase.processing);
 
+    // Se há uma proposta offline aguardando confirmação, trata aqui
+    if (_pending != null) {
+      _handlePendingReply(text);
+      return;
+    }
+
     final auth = context.read<AuthProvider>();
-    // Modo local (sem nuvem): só comandos básicos
-    if (auth.localMode) {
+    // Modo local (sem nuvem) ou IA já esgotada nesta sessão: só offline
+    if (auth.localMode || _aiExhausted) {
       setState(() => _source = 'basic');
       _processCommandOffline(text);
       return;
@@ -440,6 +459,8 @@ class _VoiceScreenState extends State<VoiceScreen>
       _say(result.reply);
     } on AiQuotaException {
       if (!mounted) return;
+      // Fica no offline pelo resto da sessão (não martela a cota)
+      _aiExhausted = true;
       setState(() => _source = 'basic');
       _processCommandOffline(text);
       setState(() => _feedback =
@@ -451,233 +472,350 @@ class _VoiceScreenState extends State<VoiceScreen>
     }
   }
 
-  /// Interpretador por regras (offline/fallback) — comandos conhecidos.
+  // ═══════════════════════════════════════════════════════════════════
+  // Confirmação de ações offline (capturar → confirmar → salvar)
+  // ═══════════════════════════════════════════════════════════════════
+
+  bool _isYes(String t) => RegExp(
+          r'\b(sim|claro|pode|confirm|isso|ok|okay|correto|certo|exato|positivo|manda|salva|salvar|agenda|cria|criar|fazer|faz)\b')
+      .hasMatch(t);
+
+  bool _isNo(String t) => RegExp(
+          r'\b(n[ãa]o|nao|cancela|cancelar|deixa|esquece|errado|negativo|para)\b')
+      .hasMatch(t);
+
+  /// Resposta do usuário a uma proposta pendente.
+  void _handlePendingReply(String text) {
+    final t = text.trim().toLowerCase();
+    final raw = _pending!.data['raw'] as String?;
+
+    // "não" é checado antes de "sim" (ex.: "não pode" = negação)
+    if (_isNo(t)) {
+      _pending = null;
+      _say('Ok, cancelei. Pode falar outro comando.');
+      return;
+    }
+    if (_isYes(t)) {
+      final summary = _pending!.summary;
+      _executePending();
+      _pending = null;
+      _say('✅ Pronto! $summary');
+      return;
+    }
+    // Redirecionar o tipo, mantendo o texto original
+    if (raw != null && RegExp(r'\b(nota|anota)\b').hasMatch(t)) {
+      _proposeNote(raw);
+      return;
+    }
+    if (raw != null &&
+        RegExp(r'\b(compromisso|reuni|consulta|agenda)\b').hasMatch(t)) {
+      _proposeAppointmentFromRaw(raw);
+      return;
+    }
+    if (raw != null && RegExp(r'\btarefa\b').hasMatch(t)) {
+      _proposeTask(raw);
+      return;
+    }
+    // Qualquer outra coisa: considera um novo comando
+    _pending = null;
+    _processCommandOffline(text);
+  }
+
+  Future<void> _executePending() async {
+    final p = _pending!;
+    final tasks = context.read<TaskProvider>();
+    final notes = context.read<NoteProvider>();
+    final appts = context.read<AppointmentProvider>();
+    switch (p.kind) {
+      case 'create_task':
+        await tasks.addTask(
+          nome: p.data['nome'] as String,
+          data: p.data['data'] as String,
+          horario: p.data['horario'] as String,
+          prioridade: p.data['prioridade'] as String,
+          lembrete: true,
+        );
+      case 'create_appointment':
+        final parts = (p.data['data'] as String).split('/');
+        await appts.addAppointment(
+          titulo: p.data['titulo'] as String,
+          horario: p.data['horario'] as String,
+          local: p.data['local'] as String,
+          date: DateTime(
+              int.parse(parts[2]), int.parse(parts[1]), int.parse(parts[0])),
+        );
+      case 'create_note':
+        await notes.addNote(
+            titulo: p.data['titulo'] as String,
+            corpo: p.data['corpo'] as String);
+      case 'complete':
+        await tasks.completeTask(p.data['id'] as String);
+      case 'delete':
+        await tasks.deleteTask(p.data['id'] as String);
+      case 'reschedule':
+        await tasks.rescheduleTask(p.data['id'] as String,
+            p.data['data'] as String, p.data['horario'] as String);
+      case 'cancel_appointment':
+        await appts.deleteAppointment(p.data['id'] as String);
+    }
+  }
+
+  // ─── Propostas (montam _pending + perguntam "Confirmo?") ─────────────
+
+  void _proposeTask(String raw, {bool capture = false}) {
+    final pr = _extractPriority(raw);
+    final d = _extractDate(pr.rest);
+    final tm = _extractTime(d.rest);
+    var nome = _clean(tm.rest);
+    if (nome.isEmpty) nome = _clean(raw);
+    _pending = _PendingAction('create_task', {
+      'nome': nome,
+      'data': d.data,
+      'horario': tm.horario,
+      'prioridade': pr.prioridade,
+      'raw': raw,
+    }, 'Tarefa "$nome" em ${d.data} às ${tm.horario}');
+    if (capture) {
+      _say('Não entendi o comando, mas posso salvar como tarefa: "$nome" '
+          'em ${d.data} às ${tm.horario}. Confirmo? (ou diga "nota" ou "compromisso")');
+    } else {
+      final prLabel = AppColors.priorityLabel(pr.prioridade);
+      _say('Tarefa "$nome" para ${d.data} às ${tm.horario}, '
+          'prioridade $prLabel. Confirmo?');
+    }
+  }
+
+  void _proposeAppointmentFromRaw(String raw) {
+    var rest = raw.replaceAll(
+        RegExp(
+            r'\bagendar\b|\bmarcar\b|novo compromisso|criar compromisso|\btenho\b|\buma?\b',
+            caseSensitive: false),
+        ' ');
+    final d = _extractDate(rest);
+    final tm = _extractTime(d.rest);
+    rest = tm.rest;
+    String local = '';
+    final localReg =
+        RegExp(r'\b(?:no|na|em)\s+([\wÀ-ú ]{3,30})\s*$', caseSensitive: false);
+    final lm = localReg.firstMatch(rest.trim());
+    if (lm != null) {
+      local = _clean(lm.group(1)!);
+      rest = rest.replaceFirst(localReg, ' ');
+    }
+    var titulo = _clean(rest);
+    if (titulo.isEmpty) titulo = _clean(raw);
+    _pending = _PendingAction('create_appointment', {
+      'titulo': titulo,
+      'data': d.data,
+      'horario': tm.horario,
+      'local': local,
+      'raw': raw,
+    }, 'Compromisso "$titulo" em ${d.data} às ${tm.horario}');
+    _say('Compromisso "$titulo" para ${d.data} às ${tm.horario}'
+        '${local.isNotEmpty ? ' em $local' : ''}. Confirmo?');
+  }
+
+  void _proposeNote(String raw) {
+    final body = _clean(raw.replaceAll(
+        RegExp(
+            r'\b(anotar|anota|nova nota|criar nota|tomar nota|salvar nota|nota)\b',
+            caseSensitive: false),
+        ' '));
+    final corpo = body.isEmpty ? _clean(raw) : body;
+    final titulo = corpo.length > 40 ? '${corpo.substring(0, 40)}...' : corpo;
+    _pending = _PendingAction(
+        'create_note', {'titulo': titulo, 'corpo': corpo, 'raw': raw},
+        'Nota "$titulo"');
+    _say('Nota: "$titulo". Confirmo?');
+  }
+
+  /// Interpretador por regras (offline). Consultas/conversa respondem direto;
+  /// mutações são PROPOSTAS e só executam após confirmação. Se nada casar,
+  /// captura como tarefa (nunca perde) — também com confirmação.
   void _processCommandOffline(String text) {
     final lower = text.toLowerCase();
     final tasks = context.read<TaskProvider>();
-    final notes = context.read<NoteProvider>();
     final appointments = context.read<AppointmentProvider>();
 
-    // ── Consultas ─────────────────────────────────────────────────────
+    // ═══ Conversa / informações (resposta direta, sem confirmação) ═══
 
-    if (RegExp(r'(listar|quais|minhas)\b.*\btarefas conclu[ií]das')
+    if (RegExp(r'^(oi|ol[áa]|bom dia|boa tarde|boa noite|e a[íi]|opa)\b')
         .hasMatch(lower)) {
-      final done = tasks.completed;
-      if (done.isEmpty) {
-        _say('Você ainda não concluiu nenhuma tarefa.');
-      } else {
-        final names = done.take(5).map((t) => '• ${t.nome}').join('\n');
-        _say('✅ ${done.length} tarefa(s) concluída(s):\n$names');
-      }
+      _say('Olá! Posso criar tarefas, agendar compromissos ou anotar notas. '
+          'É só falar.');
       return;
     }
-
-    if (RegExp(r'(listar|quais( s[ãa]o)?|minhas)\b.*\btarefas')
+    if (RegExp(r'\b(obrigad|valeu|agrade)').hasMatch(lower)) {
+      _say('De nada! 😊');
+      return;
+    }
+    if (RegExp(r'\b(ajuda|me ajuda|quais comandos)\b|o que voc[êe] (faz|consegue|pode)')
+        .hasMatch(lower)) {
+      _say('Posso criar tarefas, agendar compromissos, anotar notas, concluir, '
+          'reagendar, excluir e listar o que você tem. Fale naturalmente que '
+          'eu confirmo antes de salvar.');
+      return;
+    }
+    if (RegExp(r'que horas|horas s[ãa]o|hora certa').hasMatch(lower)) {
+      _say('Agora são ${DateFormat('HH:mm').format(DateTime.now())}.');
+      return;
+    }
+    if (RegExp(r'que dia [ée] hoje|data de hoje|dia de hoje').hasMatch(lower)) {
+      _say('Hoje é ${DateFormat("EEEE, d 'de' MMMM", 'pt_BR').format(DateTime.now())}.');
+      return;
+    }
+    if (RegExp(r'pr[óo]xim[oa] (compromisso|reuni|consulta)').hasMatch(lower)) {
+      final up = appointments.upcoming;
+      _say(up.isEmpty
+          ? 'Você não tem compromissos futuros.'
+          : 'Seu próximo compromisso é ${up.first.titulo} em '
+              '${up.first.dateFormatted} às ${up.first.horario}.');
+      return;
+    }
+    if (RegExp(r'pr[óo]xima tarefa').hasMatch(lower)) {
+      final p = tasks.pending;
+      _say(p.isEmpty
+          ? 'Nenhuma tarefa pendente.'
+          : 'Sua próxima tarefa é ${p.first.nome}, ${p.first.horario} ${p.first.data}.');
+      return;
+    }
+    if (RegExp(r'quantas tarefas|quantos compromissos').hasMatch(lower)) {
+      _say('Você tem ${tasks.pending.length} tarefa(s) pendente(s) e '
+          '${appointments.upcoming.length} compromisso(s).');
+      return;
+    }
+    if (RegExp(r'atrasad').hasMatch(lower)) {
+      final late = tasks.pending.where((t) => t.isOverdue).toList();
+      _say(late.isEmpty
+          ? 'Você não tem tarefas atrasadas. 👍'
+          : '${late.length} atrasada(s): ${late.take(5).map((t) => t.nome).join(', ')}.');
+      return;
+    }
+    if (RegExp(r'(listar|quais|minhas)\b.*conclu[ií]da').hasMatch(lower)) {
+      final done = tasks.completed;
+      _say(done.isEmpty
+          ? 'Você ainda não concluiu nenhuma tarefa.'
+          : '${done.length} concluída(s):\n${done.take(5).map((t) => '• ${t.nome}').join('\n')}');
+      return;
+    }
+    if (RegExp(r'(listar|quais|minhas|tenho)\b.*tarefa|o que (eu )?tenho (pra|para) fazer|tarefas de hoje|o que tenho hoje')
         .hasMatch(lower)) {
       final p = tasks.pending;
-      if (p.isEmpty) {
-        _say('✅ Nenhuma tarefa pendente. Tudo em dia! 🎉');
-      } else {
-        final names = p
-            .take(5)
-            .map((t) => '• ${t.nome} (${t.horario} ${t.data})')
-            .join('\n');
-        _say('✅ Você tem ${p.length} tarefa(s) pendente(s):\n$names');
-      }
+      _say(p.isEmpty
+          ? 'Nenhuma tarefa pendente. Tudo em dia! 🎉'
+          : 'Você tem ${p.length} tarefa(s):\n${p.take(5).map((t) => '• ${t.nome} (${t.horario} ${t.data})').join('\n')}');
       return;
     }
-
-    if (RegExp(r'(listar|quais|meus)\b.*\bcompromissos').hasMatch(lower) ||
+    if (RegExp(r'(listar|quais|meus)\b.*compromisso').hasMatch(lower) ||
         lower.contains('minha agenda')) {
       final up = appointments.upcoming.take(5).toList();
-      if (up.isEmpty) {
-        _say('Você não tem compromissos futuros.');
-      } else {
-        final names = up
-            .map((a) => '• ${a.titulo} — ${a.dateFormatted} às ${a.horario}')
-            .join('\n');
-        _say('✅ Próximos compromissos:\n$names');
-      }
+      _say(up.isEmpty
+          ? 'Você não tem compromissos futuros.'
+          : 'Próximos compromissos:\n${up.map((a) => '• ${a.titulo} — ${a.dateFormatted} às ${a.horario}').join('\n')}');
       return;
     }
 
-    // ── Reagendar tarefa ──────────────────────────────────────────────
+    // ═══ Mutações: propõe e pede confirmação ═══
 
-    if (lower.contains('reagendar')) {
+    // Reagendar
+    if (RegExp(r'reagendar|adiar|transferir|empurr|\bmuda\b|\bpassa\b')
+        .hasMatch(lower)) {
       var rest = text.replaceAll(
-          RegExp(r'reagendar( a tarefa| o lembrete| a reunião)?',
+          RegExp(r'reagendar|adiar|transferir|empurr\w*|\bmuda\b|\bpassa\b|\bpara\b|\bpra\b|a tarefa|o lembrete',
               caseSensitive: false),
           ' ');
       final d = _extractDate(rest);
-      final t = _extractTime(d.rest);
-      final nome = _clean(t.rest);
-
+      final tm = _extractTime(d.rest);
+      final nome = _clean(tm.rest);
       final task = _findTask(tasks.pending, nome);
-      if (task != null) {
-        tasks.rescheduleTask(task.id, d.data, t.horario);
-        _say('✅ "${task.nome}" reagendada para ${d.data} às ${t.horario}');
-      } else {
-        _say('⚠️ Tarefa não encontrada: "$nome"');
+      if (task == null) {
+        _say('Não encontrei a tarefa "$nome".');
+        return;
       }
+      _pending = _PendingAction('reschedule',
+          {'id': task.id, 'data': d.data, 'horario': tm.horario},
+          '"${task.nome}" reagendada para ${d.data} às ${tm.horario}');
+      _say('Reagendar "${task.nome}" para ${d.data} às ${tm.horario}? Confirmo?');
       return;
     }
 
-    // ── Concluir tarefa ───────────────────────────────────────────────
-
-    if (RegExp(r'marcar como conclu[ií]da|concluir|finalizar|terminei|j[áa] fiz')
+    // Concluir
+    if (RegExp(r'marcar como conclu[ií]da|concluir|finalizar|terminei|j[áa] fiz|completar|feita')
         .hasMatch(lower)) {
       final nome = _clean(text.replaceAll(
-          RegExp(
-              r'marcar como conclu[ií]da( a tarefa)?|concluir( a)?( tarefa)?|finalizar( a)?( tarefa)?|terminei( a)?( tarefa)?|j[áa] fiz( a)?( tarefa)?',
+          RegExp(r'marcar como conclu[ií]da|concluir|finalizar|terminei|j[áa] fiz|completar|feita|a tarefa|de',
               caseSensitive: false),
           ' '));
       final task = _findTask(tasks.pending, nome);
-      if (task != null) {
-        tasks.completeTask(task.id);
-        _say('✅ Tarefa "${task.nome}" concluída! Parabéns! 🎉');
-      } else {
-        _say('⚠️ Tarefa não encontrada: "$nome"');
+      if (task == null) {
+        _say('Não encontrei a tarefa "$nome".');
+        return;
       }
+      _pending = _PendingAction(
+          'complete', {'id': task.id}, '"${task.nome}" concluída');
+      _say('Concluir a tarefa "${task.nome}"? Confirmo?');
       return;
     }
 
-    // ── Excluir tarefa ────────────────────────────────────────────────
-
-    if (RegExp(r'(excluir|apagar|remover|deletar)\b.*\btarefa|'
-            r'(excluir|apagar|remover|deletar) tarefa')
+    // Excluir tarefa
+    if (RegExp(r'(excluir|apagar|remover|deletar|tira(r)? da lista)\b.*tarefa|(excluir|apagar|remover|deletar) (a )?tarefa')
         .hasMatch(lower)) {
       final nome = _clean(text.replaceAll(
-          RegExp(r'(excluir|apagar|remover|deletar)( a)?( tarefa)?',
+          RegExp(r'(excluir|apagar|remover|deletar|tirar? da lista)( a)?( tarefa)?',
               caseSensitive: false),
           ' '));
       final task = _findTask(tasks.tasks, nome);
-      if (task != null) {
-        tasks.deleteTask(task.id);
-        _say('✅ Tarefa "${task.nome}" excluída.');
-      } else {
-        _say('⚠️ Tarefa não encontrada: "$nome"');
+      if (task == null) {
+        _say('Não encontrei a tarefa "$nome".');
+        return;
       }
+      _pending =
+          _PendingAction('delete', {'id': task.id}, '"${task.nome}" excluída');
+      _say('Excluir a tarefa "${task.nome}"? Confirmo?');
       return;
     }
 
-    // ── Cancelar compromisso ──────────────────────────────────────────
-
-    if (RegExp(r'(cancelar|excluir|apagar|remover|desmarcar)\b.*\b(compromisso|reuni[ãa]o|consulta|evento)')
+    // Cancelar compromisso
+    if (RegExp(r'(cancelar|desmarcar|excluir|apagar|remover)\b.*(compromisso|reuni[ãa]o|consulta|evento)')
         .hasMatch(lower)) {
       final nome = _clean(text.replaceAll(
-          RegExp(
-              r'(cancelar|excluir|apagar|remover|desmarcar)( o| a)?( compromisso| reuni[ãa]o| consulta| evento)?( de| da| do)?',
+          RegExp(r'(cancelar|desmarcar|excluir|apagar|remover)( o| a)?( compromisso| reuni[ãa]o| consulta| evento)?( de| da| do)?',
               caseSensitive: false),
           ' '));
       final ap = _findAppointment(appointments.appointments, nome);
-      if (ap != null) {
-        appointments.deleteAppointment(ap.id);
-        _say('✅ Compromisso "${ap.titulo}" cancelado.');
-      } else {
-        _say('⚠️ Compromisso não encontrado: "$nome"');
+      if (ap == null) {
+        _say('Não encontrei o compromisso "$nome".');
+        return;
       }
+      _pending = _PendingAction('cancel_appointment', {'id': ap.id},
+          'Compromisso "${ap.titulo}" cancelado');
+      _say('Cancelar o compromisso "${ap.titulo}"? Confirmo?');
       return;
     }
 
-    // ── Criar compromisso / agendamento ───────────────────────────────
-
-    if (RegExp(r'\bagendar\b|\bmarcar\b.*\b(reuni[ãa]o|consulta|compromisso|evento)|novo compromisso|criar compromisso')
+    // Criar compromisso
+    if (RegExp(r'\bagendar\b|novo compromisso|criar compromisso|\bmarcar\b.*(reuni[ãa]o|consulta|compromisso|evento)|tenho (uma )?(reuni[ãa]o|consulta)')
         .hasMatch(lower)) {
-      var rest = text.replaceAll(
-          RegExp(
-              r'\bagendar\b|\bmarcar\b|novo compromisso|criar compromisso|\buma?\b',
-              caseSensitive: false),
-          ' ');
-
-      final d = _extractDate(rest);
-      final t = _extractTime(d.rest);
-      rest = t.rest;
-
-      // Local: "no escritório", "na clínica" (após remover data/hora)
-      String local = '';
-      final localReg = RegExp(r'\b(?:no|na|em)\s+([\wÀ-ú ]{3,30})\s*$',
-          caseSensitive: false);
-      final lm = localReg.firstMatch(rest.trim());
-      if (lm != null) {
-        local = _clean(lm.group(1)!);
-        rest = rest.replaceFirst(localReg, ' ');
-      }
-
-      final titulo = _clean(rest);
-      if (titulo.isEmpty) {
-        _say('⚠️ Não entendi o nome do compromisso. Tente: "Agendar reunião amanhã às 10h"');
-        return;
-      }
-
-      final parts = d.data.split('/');
-      appointments.addAppointment(
-        titulo: titulo,
-        horario: t.horario,
-        local: local,
-        date: DateTime(
-            int.parse(parts[2]), int.parse(parts[1]), int.parse(parts[0])),
-      );
-      _say('✅ Compromisso "$titulo" agendado para ${d.data} às ${t.horario}'
-          '${local.isNotEmpty ? ' em $local' : ''}');
+      _proposeAppointmentFromRaw(text);
       return;
     }
 
-    // ── Criar tarefa / lembrete ───────────────────────────────────────
-
-    if (lower.contains('criar tarefa') ||
-        lower.contains('adicionar tarefa') ||
-        lower.contains('nova tarefa') ||
-        lower.contains('lembrar de') ||
-        lower.contains('lembrete')) {
-      var rest = text.replaceAll(
-          RegExp(
-              r'criar tarefa|adicionar tarefa|nova tarefa|lembrar de|criar lembrete|adicionar lembrete|lembrete',
-              caseSensitive: false),
-          ' ');
-
-      final pr = _extractPriority(rest);
-      final d = _extractDate(pr.rest);
-      final t = _extractTime(d.rest);
-      var nome = _clean(t.rest);
-      if (nome.isEmpty) nome = _clean(text);
-
-      tasks.addTask(
-        nome: nome,
-        data: d.data,
-        horario: t.horario,
-        prioridade: pr.prioridade,
-        lembrete: true,
-      );
-      final prLabel = AppColors.priorityLabel(pr.prioridade);
-      _say('✅ Tarefa criada: "$nome"\n📅 ${d.data} às ${t.horario} • Prioridade $prLabel');
+    // Criar nota
+    if (RegExp(r'\b(anotar|anota|nova nota|criar nota|tomar nota|salvar nota)\b')
+        .hasMatch(lower)) {
+      _proposeNote(text);
       return;
     }
 
-    // ── Adicionar nota ────────────────────────────────────────────────
-
-    if (lower.contains('adicionar nota') ||
-        lower.contains('nova nota') ||
-        lower.contains('criar nota') ||
-        lower.contains('anotar')) {
-      final body = _clean(text.replaceAll(
-          RegExp(r'adicionar nota|nova nota|criar nota|anotar( que)?',
-              caseSensitive: false),
-          ' '));
-      if (body.isEmpty) {
-        _say('⚠️ A nota ficou vazia. Tente: "Anotar comprar material"');
-        return;
-      }
-      final titulo = body.length > 40 ? '${body.substring(0, 40)}...' : body;
-      notes.addNote(titulo: titulo, corpo: body);
-      _say('✅ Nota criada: "$titulo"');
+    // Criar tarefa (explícito)
+    if (RegExp(r'criar tarefa|nova tarefa|adicionar tarefa|lembrar de|me lembra|lembrete|preciso|tenho que')
+        .hasMatch(lower)) {
+      _proposeTask(text);
       return;
     }
 
-    _say('⚠️ Comando não reconhecido. Exemplos:\n'
-        '• "Criar tarefa pagar conta amanhã às 9h"\n'
-        '• "Agendar reunião sexta às 10h no escritório"\n'
-        '• "Concluir tarefa pagar conta"\n'
-        '• "Listar minhas tarefas"');
+    // ═══ Captura: nada reconhecido → salva como tarefa (nunca perde) ═══
+    _proposeTask(text, capture: true);
   }
 
   @override
