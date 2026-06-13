@@ -14,6 +14,9 @@ import '../../services/ai_voice_service.dart';
 import '../../services/tts_service.dart';
 import '../../utils/app_colors.dart';
 
+/// Estado atual do ciclo de conversa (indicador visual).
+enum _VoicePhase { idle, listening, processing, responding }
+
 class VoiceScreen extends StatefulWidget {
   const VoiceScreen({super.key});
 
@@ -34,6 +37,8 @@ class _VoiceScreenState extends State<VoiceScreen>
   AiVoiceService? _ai;
   bool _conversationActive = false; // conversa hands-free iniciada
   bool _paused = false; // usuário tocou no ícone 🔇
+  _VoicePhase _phase = _VoicePhase.idle;
+  int _silentCycles = 0; // ciclos seguidos sem fala → inatividade
   late AnimationController _pulseCtrl;
 
   @override
@@ -54,7 +59,7 @@ class _VoiceScreenState extends State<VoiceScreen>
         setState(() => _listening = false);
         // 'no-speech'/'no-match': só silêncio — em conversa, volta a ouvir
         if (e.errorMsg == 'no-speech' || e.errorMsg == 'error_no_match') {
-          _scheduleRelisten();
+          _onSilentCycle();
           return;
         }
         // Erro real: encerra a conversa e avisa (sem ficar em loop)
@@ -74,8 +79,8 @@ class _VoiceScreenState extends State<VoiceScreen>
             _processed = true;
             _processCommand(_transcript);
           } else if (_transcript.isEmpty) {
-            // Silêncio: mantém ouvindo (conversa contínua)
-            _scheduleRelisten();
+            // Silêncio: conta inatividade e mantém ouvindo
+            _onSilentCycle();
           }
         }
       },
@@ -107,6 +112,8 @@ class _VoiceScreenState extends State<VoiceScreen>
       _feedback = '';
       _source = '';
       _transcript = '';
+      _silentCycles = 0;
+      _phase = _VoicePhase.listening;
     });
     await _startListening();
   }
@@ -121,12 +128,13 @@ class _VoiceScreenState extends State<VoiceScreen>
       _listening = true;
       _processed = false;
       _transcript = '';
-      if (_feedback.isEmpty) _feedback = 'Ouvindo...';
+      _phase = _VoicePhase.listening;
     });
     await _speech.listen(
       onResult: (r) {
         if (!mounted) return;
         setState(() => _transcript = r.recognizedWords);
+        if (r.recognizedWords.trim().isNotEmpty) _silentCycles = 0;
         if (r.finalResult && !_processed) {
           _processed = true;
           setState(() => _listening = false);
@@ -332,28 +340,49 @@ class _VoiceScreenState extends State<VoiceScreen>
 
   /// Mostra a resposta na tela, fala em voz alta e — em conversa contínua —
   /// reabre o microfone quando a fala termina.
-  void _say(String msg, {bool keepListening = false}) {
+  void _say(String msg) {
     if (!mounted) return;
     setState(() => _feedback = msg);
-    _speakThen(msg, keepListening);
+    _speakThen(msg);
   }
 
-  Future<void> _speakThen(String msg, bool keepListening) async {
+  /// Fala a resposta e retorna automaticamente para escuta (modo contínuo).
+  Future<void> _speakThen(String msg) async {
+    if (mounted) setState(() => _phase = _VoicePhase.responding);
     final sound = context.read<SettingsProvider>().sound;
     if (sound) {
       // speak() completa quando a fala termina (mic já parado, sem eco)
       await TtsService().speak(msg);
     }
     if (!mounted) return;
-    if (keepListening) {
-      _scheduleRelisten();
+    _scheduleRelisten(); // retorno automático à escuta (< 500ms)
+  }
+
+  /// Conta ciclos seguidos de silêncio; encerra por inatividade após o limite.
+  void _onSilentCycle() {
+    _silentCycles++;
+    if (_silentCycles >= 5) {
+      _endSession(); // inatividade prolongada
     } else {
-      // Tarefa concluída: desativa o microfone automaticamente
-      setState(() {
-        _conversationActive = false;
-        _paused = false;
-        _listening = false;
-      });
+      _scheduleRelisten();
+    }
+  }
+
+  /// Encerra a sessão de voz (palavra de parada, inatividade ou pausa final).
+  Future<void> _endSession({String farewell = ''}) async {
+    await _speech.stop();
+    await TtsService().stop();
+    if (!mounted) return;
+    setState(() {
+      _conversationActive = false;
+      _paused = false;
+      _listening = false;
+      _phase = _VoicePhase.idle;
+      _silentCycles = 0;
+      _feedback = farewell.isEmpty ? '⚪ Conversa encerrada.' : '⚪ $farewell';
+    });
+    if (farewell.isNotEmpty && context.read<SettingsProvider>().sound) {
+      await TtsService().speak(farewell);
     }
   }
 
@@ -371,9 +400,19 @@ class _VoiceScreenState extends State<VoiceScreen>
   /// estourar ou a IA estiver indisponível, cai nos comandos por regras.
   Future<void> _processCommand(String text) async {
     if (text.isEmpty) {
-      _say('Nenhum comando detectado. Tente novamente.');
+      _scheduleRelisten();
       return;
     }
+
+    // Palavras de encerramento: finalizam a sessão de voz
+    final t = text.trim().toLowerCase();
+    if (t.split(RegExp(r'\s+')).length <= 3 &&
+        RegExp(r'\b(encerrar|parar|finalizar|tchau|chega)\b').hasMatch(t)) {
+      await _endSession(farewell: 'Encerrado. Até logo!');
+      return;
+    }
+
+    if (mounted) setState(() => _phase = _VoicePhase.processing);
 
     final auth = context.read<AuthProvider>();
     // Modo local (sem nuvem): só comandos básicos
@@ -397,9 +436,8 @@ class _VoiceScreenState extends State<VoiceScreen>
     try {
       final result = await _ai!.process(text);
       if (!mounted) return;
-      // conclusão → mic desliga; pergunta/confirmação → continua ouvindo
-      _say(result.conversationDone ? '✅ ${result.reply}' : result.reply,
-          keepListening: !result.conversationDone);
+      // Modo contínuo: sempre volta a ouvir após responder
+      _say(result.reply);
     } on AiQuotaException {
       if (!mounted) return;
       setState(() => _source = 'basic');
@@ -706,46 +744,63 @@ class _VoiceScreenState extends State<VoiceScreen>
                 ),
               ),
 
-              // Indicador/controle inferior 🎤/🔇 (só durante a conversa)
+              // Estado da conversa + controle (toque para pausar/retomar)
               if (_conversationActive) ...[
                 const SizedBox(height: 18),
-                GestureDetector(
-                  onTap: _togglePause,
-                  child: AnimatedBuilder(
-                    animation: _pulseCtrl,
-                    builder: (_, __) {
-                      final active = !_paused;
-                      final color =
-                          active ? AppColors.success : AppColors.textSecondary;
-                      return Container(
-                        width: 54,
-                        height: 54,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: color.withValues(
-                              alpha: active
-                                  ? 0.12 + _pulseCtrl.value * 0.12
-                                  : 0.10),
-                          border: Border.all(color: color, width: 2),
+                Builder(builder: (_) {
+                  Color color;
+                  IconData icon;
+                  String label;
+                  if (_paused) {
+                    color = AppColors.textSecondary;
+                    icon = Icons.mic_off_rounded;
+                    label = 'Pausado — toque para retomar';
+                  } else {
+                    switch (_phase) {
+                      case _VoicePhase.processing:
+                        color = const Color(0xFF1E88E5); // 🔵
+                        icon = Icons.sync_rounded;
+                        label = '🔵 Processando';
+                      case _VoicePhase.responding:
+                        color = const Color(0xFF8E24AA); // 🟣
+                        icon = Icons.graphic_eq_rounded;
+                        label = '🟣 Respondendo';
+                      case _VoicePhase.listening:
+                      case _VoicePhase.idle:
+                        color = AppColors.success; // 🟢
+                        icon = Icons.mic_rounded;
+                        label = '🟢 Ouvindo';
+                    }
+                  }
+                  final pulsing =
+                      !_paused && _phase == _VoicePhase.listening;
+                  return Column(
+                    children: [
+                      GestureDetector(
+                        onTap: _togglePause,
+                        child: AnimatedBuilder(
+                          animation: _pulseCtrl,
+                          builder: (_, __) => Container(
+                            width: 56,
+                            height: 56,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: color.withValues(
+                                  alpha: pulsing
+                                      ? 0.12 + _pulseCtrl.value * 0.14
+                                      : 0.12),
+                              border: Border.all(color: color, width: 2),
+                            ),
+                            child: Icon(icon, color: color, size: 26),
+                          ),
                         ),
-                        child: Icon(
-                          active ? Icons.mic_rounded : Icons.mic_off_rounded,
-                          color: color,
-                          size: 26,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  _paused ? 'Pausado — toque para retomar' : 'Ouvindo...',
-                  style: TextStyle(
-                    color:
-                        _paused ? AppColors.textSecondary : AppColors.success,
-                    fontSize: 11,
-                  ),
-                ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(label,
+                          style: TextStyle(color: color, fontSize: 12)),
+                    ],
+                  );
+                }),
               ],
 
               const SizedBox(height: 16),
