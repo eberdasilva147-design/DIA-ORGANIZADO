@@ -17,7 +17,7 @@ class NotesScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.add_circle_outline, color: AppColors.accent),
-            onPressed: () => _showCreateModal(context),
+            onPressed: () => showNoteModal(context),
           ),
         ],
       ),
@@ -82,7 +82,7 @@ class NotesScreen extends StatelessWidget {
       ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'fab_notas',
-        onPressed: () => _showCreateModal(context),
+        onPressed: () => showNoteModal(context),
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('Nova nota', style: TextStyle(color: Colors.white)),
@@ -90,17 +90,19 @@ class NotesScreen extends StatelessWidget {
     );
   }
 
-  void _showCreateModal(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => ChangeNotifierProvider.value(
-        value: context.read<NoteProvider>(),
-        child: const _NoteCreateModal(),
-      ),
-    );
-  }
+}
+
+/// Abre o modal de nota (criação ou, se [note] informada, edição).
+void showNoteModal(BuildContext context, {NoteModel? note}) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => ChangeNotifierProvider.value(
+      value: context.read<NoteProvider>(),
+      child: _NoteCreateModal(note: note),
+    ),
+  );
 }
 
 class _NoteCard extends StatelessWidget {
@@ -142,9 +144,34 @@ class _NoteCard extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 6),
-            Text(
-              DateFormat('dd/MM/yyyy HH:mm').format(note.dataCriacao),
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+            Row(
+              children: [
+                Text(
+                  DateFormat('dd/MM/yyyy HH:mm').format(note.dataCriacao),
+                  style: const TextStyle(
+                      color: AppColors.textSecondary, fontSize: 11),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () => showNoteModal(context, note: note),
+                  icon: const Icon(Icons.edit_outlined,
+                      size: 16, color: AppColors.accent),
+                  label: const Text('Editar',
+                      style: TextStyle(color: AppColors.accent, fontSize: 13)),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => _confirmDelete(context),
+                  icon: const Icon(Icons.delete_outline,
+                      size: 18, color: AppColors.textSecondary),
+                  tooltip: 'Excluir',
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
             ),
           ],
         ),
@@ -181,7 +208,9 @@ class _NoteCard extends StatelessWidget {
 }
 
 class _NoteCreateModal extends StatefulWidget {
-  const _NoteCreateModal();
+  /// Se informada, abre em modo edição.
+  final NoteModel? note;
+  const _NoteCreateModal({this.note});
 
   @override
   State<_NoteCreateModal> createState() => _NoteCreateModalState();
@@ -190,6 +219,18 @@ class _NoteCreateModal extends StatefulWidget {
 class _NoteCreateModalState extends State<_NoteCreateModal> {
   final _titleCtrl = TextEditingController();
   final _bodyCtrl = TextEditingController();
+
+  bool get _isEditing => widget.note != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final n = widget.note;
+    if (n != null) {
+      _titleCtrl.text = n.titulo;
+      _bodyCtrl.text = n.corpo;
+    }
+  }
 
   @override
   void dispose() {
@@ -200,10 +241,20 @@ class _NoteCreateModalState extends State<_NoteCreateModal> {
 
   Future<void> _save() async {
     if (_titleCtrl.text.trim().isEmpty) return;
-    await context.read<NoteProvider>().addNote(
-          titulo: _titleCtrl.text.trim(),
-          corpo: _bodyCtrl.text.trim(),
-        );
+    final provider = context.read<NoteProvider>();
+    if (_isEditing) {
+      await provider.updateNote(NoteModel(
+        id: widget.note!.id,
+        titulo: _titleCtrl.text.trim(),
+        corpo: _bodyCtrl.text.trim(),
+        dataCriacao: widget.note!.dataCriacao,
+      ));
+    } else {
+      await provider.addNote(
+        titulo: _titleCtrl.text.trim(),
+        corpo: _bodyCtrl.text.trim(),
+      );
+    }
     if (mounted) Navigator.pop(context);
   }
 
@@ -230,8 +281,8 @@ class _NoteCreateModalState extends State<_NoteCreateModal> {
               ),
             ),
             const SizedBox(height: 16),
-            const Text('Nova Nota',
-                style: TextStyle(
+            Text(_isEditing ? 'Editar Nota' : 'Nova Nota',
+                style: const TextStyle(
                     color: AppColors.textPrimary,
                     fontSize: 18,
                     fontWeight: FontWeight.w700)),
@@ -257,7 +308,7 @@ class _NoteCreateModalState extends State<_NoteCreateModal> {
               onPressed: _save,
               style: ElevatedButton.styleFrom(
                   minimumSize: const Size.fromHeight(48)),
-              child: const Text('Salvar nota'),
+              child: Text(_isEditing ? 'Salvar alterações' : 'Salvar nota'),
             ),
           ],
         ),
