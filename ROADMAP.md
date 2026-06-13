@@ -29,20 +29,20 @@ executar** · **prevenção de duplicidade** · **modo offline capturar + confir
 - [ ] **Usuário:** GitHub → Settings → Pages → Source: GitHub Actions
 - [ ] Validar em `https://eberdasilva147-design.github.io/DIA-ORGANIZADO/` (PC + celular)
 
-### 🔜 FASE 1 — Usabilidade e consistência
-- [ ] Tarefas concluídas: excluir por item
-- [ ] Tarefas pendentes: botão "Reagendar"
-- [ ] Nova tarefa: campo Observação + Antecedência do lembrete (no horário/5/15/30min/1h/2h/1dia/personalizado)
-- [ ] Sincronização Home ↔ Tarefas ↔ Agenda (fonte única)
-- [ ] Home: "Próximos Compromissos" → "TODOS OS COMPROMISSOS"
-- [ ] Home: "Foco do Dia" → "Compromissos de Hoje"
-- [ ] Home: nova seção "ATIVIDADES DOS PRÓXIMOS 5 DIAS"
-- [ ] Home: ocultar compromisso/lembrete da Home
-- [ ] Notas: editar e excluir
-- [ ] Agenda: exclusão com confirmação + tempo real
-- [ ] Agenda: navegação por gestos (deslizar troca o mês)
-- [ ] Agenda: indicadores 🟢 confirmado / 🟡 pendente / 🔵 hoje / 🔴 atrasado + editar/reagendar/excluir nos cards
-- [ ] Home: destaque premium do botão "Nova Tarefa"
+### ✅ FASE 1 — Usabilidade e consistência (CONCLUÍDA)
+- [x] Tarefas concluídas: excluir por item
+- [x] Tarefas pendentes: botão "Reagendar"
+- [x] Nova tarefa: campo Observação + Antecedência do lembrete (no horário/5/15/30min/1h/2h/1dia/personalizado)
+- [x] Sincronização Home ↔ Tarefas ↔ Agenda (mesmos providers)
+- [x] Home: "Próximos Compromissos" → "TODOS OS COMPROMISSOS"
+- [x] Home: "Foco do Dia" → "Compromissos de Hoje"
+- [x] Home: nova seção "ATIVIDADES DOS PRÓXIMOS 5 DIAS"
+- [x] Home: ocultar compromisso/lembrete da Home
+- [x] Notas: editar e excluir
+- [x] Agenda: exclusão com confirmação + tempo real
+- [x] Agenda: navegação por gestos (deslizar troca o mês)
+- [x] Agenda: indicadores 🟢 confirmado / 🟡 pendente / 🔵 hoje / 🔴 atrasado + editar/reagendar/excluir nos cards
+- [x] Home: destaque premium do botão "Nova Tarefa"
 
 ### 🔜 FASE 2 — Tema e sistema de cores (fundacional)
 - [ ] Refatorar `AppColors` fixo → sistema dinâmico

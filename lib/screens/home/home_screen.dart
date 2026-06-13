@@ -6,11 +6,16 @@ import '../../providers/auth_provider.dart';
 import '../../providers/task_provider.dart';
 import '../../providers/appointment_provider.dart';
 import '../../providers/verse_provider.dart';
+import '../../models/appointment_model.dart';
 import '../../utils/app_colors.dart';
 import '../../widgets/task_card.dart';
 import '../../widgets/appointment_card.dart';
 import '../settings/settings_screen.dart';
 import '../tasks/task_create_modal.dart';
+import '../tasks/tasks_screen.dart' show rescheduleTaskFlow;
+import '../agenda/agenda_screen.dart'
+    show rescheduleAppointmentFlow, confirmDeleteAppointment;
+import '../agenda/appointment_create_modal.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -27,15 +32,114 @@ class HomeScreen extends StatelessWidget {
         .format(DateTime.now());
   }
 
+  Widget _sectionTitle(IconData icon, String title, String? count) => Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Flexible(
+            child: Row(
+              children: [
+                Icon(icon, color: AppColors.gold, size: 18),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(title,
+                      style: GoogleFonts.notoSerif(
+                          color: AppColors.textPrimary,
+                          fontSize: 19,
+                          fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ),
+          ),
+          if (count != null)
+            Text(count,
+                style: GoogleFonts.spaceGrotesk(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600)),
+        ],
+      );
+
+  Widget _emptyCard(String text) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Center(
+            child: Text(text,
+                style: const TextStyle(color: AppColors.textSecondary))),
+      );
+
+  Widget _apptCard(BuildContext context, AppointmentModel ap) =>
+      AppointmentCard(
+        appointment: ap,
+        onEdit: () =>
+            AppointmentCreateModal.show(context, ap.date, appointment: ap),
+        onReschedule: () => rescheduleAppointmentFlow(context, ap),
+        onHide: () =>
+            context.read<AppointmentProvider>().toggleOcultarDaHome(ap.id),
+        onDelete: () => confirmDeleteAppointment(context, ap),
+      );
+
+  Widget _novaTarefaButton(BuildContext context) => GestureDetector(
+        onTap: () => TaskCreateModal.show(context),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 15),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [AppColors.gold, AppColors.primary],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.gold.withValues(alpha: 0.4),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.add_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Text('Nova Tarefa',
+                  style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final tasks = context.watch<TaskProvider>();
     final appointments = context.watch<AppointmentProvider>();
     final verses = context.watch<VerseProvider>();
-    final todayTasks = tasks.todayTasks;
     final nextReminder = tasks.nextReminder;
-    final upcomingApps = appointments.upcoming.take(3).toList();
+
+    final now = DateTime.now();
+    final startToday = DateTime(now.year, now.month, now.day);
+    final end5 = startToday.add(const Duration(days: 6)); // hoje + 5 dias
+    final todayAppts =
+        appointments.forDate(now).where((a) => !a.ocultarDaHome).toList();
+    final next5Tasks = tasks.pending.where((t) {
+      if (t.ocultarDaHome) return false;
+      final dt = t.dateTime;
+      return dt != null && !dt.isBefore(startToday) && dt.isBefore(end5);
+    }).toList();
+    final next5Appts = appointments.upcoming
+        .where((a) => !a.ocultarDaHome && a.date.isBefore(end5))
+        .toList();
+    final allAppts =
+        appointments.upcoming.where((a) => !a.ocultarDaHome).toList();
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -165,7 +269,7 @@ class HomeScreen extends StatelessWidget {
                 ),
 
                 // Lembrete mais próximo
-                if (nextReminder != null) ...[
+                if (nextReminder != null && !nextReminder.ocultarDaHome) ...[
                   const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(14),
@@ -212,94 +316,47 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ],
 
-                // Tarefas do dia
+                // ── COMPROMISSOS DE HOJE ──
                 const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.push_pin_outlined,
-                            color: AppColors.gold, size: 18),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Foco de Hoje',
-                          style: GoogleFonts.notoSerif(
-                            color: AppColors.textPrimary,
-                            fontSize: 19,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Text(
-                      '${todayTasks.length} PENDENTE${todayTasks.length != 1 ? 'S' : ''}',
-                      style: GoogleFonts.spaceGrotesk(
-                        color: AppColors.textSecondary,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                  ],
-                ),
+                _sectionTitle(Icons.event_available_outlined,
+                    'Compromissos de Hoje', '${todayAppts.length}'),
                 const SizedBox(height: 8),
-                if (todayTasks.isEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: AppColors.card,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        'Nenhuma tarefa para hoje 🎉',
-                        style: TextStyle(color: AppColors.textSecondary),
-                      ),
-                    ),
-                  )
+                if (todayAppts.isEmpty)
+                  _emptyCard('Nenhum compromisso para hoje 🎉')
                 else
-                  ...todayTasks.map((task) => TaskCard(
-                        task: task,
-                        onComplete: () =>
-                            context.read<TaskProvider>().completeTask(task.id),
-                      )),
+                  ...todayAppts.map((ap) => _apptCard(context, ap)),
 
-                // Botão nova tarefa
+                // Botão Nova Tarefa (destaque premium Sacred Order)
+                const SizedBox(height: 12),
+                _novaTarefaButton(context),
+
+                // ── ATIVIDADES DOS PRÓXIMOS 5 DIAS ──
+                const SizedBox(height: 22),
+                _sectionTitle(Icons.upcoming_outlined,
+                    'Atividades dos próximos 5 dias', null),
                 const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () => TaskCreateModal.show(context),
-                  icon: const Icon(Icons.add, size: 18, color: AppColors.accent),
-                  label: const Text('Nova tarefa',
-                      style: TextStyle(color: AppColors.accent)),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: AppColors.border),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                ),
+                if (next5Tasks.isEmpty && next5Appts.isEmpty)
+                  _emptyCard('Nada nos próximos 5 dias.')
+                else ...[
+                  ...next5Tasks.map((t) => TaskCard(
+                        task: t,
+                        onComplete: () =>
+                            context.read<TaskProvider>().completeTask(t.id),
+                        onReschedule: () => rescheduleTaskFlow(context, t),
+                        onHide: () => context
+                            .read<TaskProvider>()
+                            .toggleOcultarDaHome(t.id),
+                      )),
+                  ...next5Appts.map((ap) => _apptCard(context, ap)),
+                ],
 
-                // Próximos compromissos
-                if (upcomingApps.isNotEmpty) ...[
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      const Icon(Icons.event_outlined,
-                          color: AppColors.gold, size: 18),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Próximos compromissos',
-                        style: GoogleFonts.notoSerif(
-                          color: AppColors.textPrimary,
-                          fontSize: 19,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
+                // ── TODOS OS COMPROMISSOS ──
+                if (allAppts.isNotEmpty) ...[
+                  const SizedBox(height: 22),
+                  _sectionTitle(Icons.event_note_outlined,
+                      'Todos os Compromissos', '${allAppts.length}'),
                   const SizedBox(height: 8),
-                  ...upcomingApps
-                      .map((ap) => AppointmentCard(appointment: ap)),
+                  ...allAppts.map((ap) => _apptCard(context, ap)),
                 ],
               ]),
             ),

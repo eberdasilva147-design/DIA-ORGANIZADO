@@ -97,6 +97,13 @@ class TaskProvider extends ChangeNotifier {
     await _scheduleReminder(task);
   }
 
+  /// Mostra/oculta a tarefa da Home (continua na lista de Tarefas).
+  Future<void> toggleOcultarDaHome(String id) async {
+    final t = _tasks.firstWhere((x) => x.id == id);
+    await DataService.instance
+        .updateTask(t.copyWith(ocultarDaHome: !t.ocultarDaHome));
+  }
+
   // O plugin de notificações exige id int; deriva um estável do id da tarefa.
   int _notificationId(String taskId) => taskId.hashCode & 0x7fffffff;
 

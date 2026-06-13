@@ -7,6 +7,7 @@ class AppointmentCard extends StatelessWidget {
   final VoidCallback? onDelete;
   final VoidCallback? onEdit;
   final VoidCallback? onReschedule;
+  final VoidCallback? onHide; // "ocultar da Home"
 
   const AppointmentCard({
     super.key,
@@ -14,6 +15,7 @@ class AppointmentCard extends StatelessWidget {
     this.onDelete,
     this.onEdit,
     this.onReschedule,
+    this.onHide,
   });
 
   // 🔴 atrasado · 🔵 hoje · 🟢 confirmado · 🟡 pendente
@@ -123,7 +125,10 @@ class AppointmentCard extends StatelessWidget {
             ),
           ),
           // Menu de ações
-          if (onEdit != null || onReschedule != null || onDelete != null)
+          if (onEdit != null ||
+              onReschedule != null ||
+              onDelete != null ||
+              onHide != null)
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert,
                   color: AppColors.textSecondary, size: 20),
@@ -131,6 +136,7 @@ class AppointmentCard extends StatelessWidget {
               onSelected: (v) {
                 if (v == 'editar') onEdit?.call();
                 if (v == 'reagendar') onReschedule?.call();
+                if (v == 'ocultar') onHide?.call();
                 if (v == 'excluir') onDelete?.call();
               },
               itemBuilder: (_) => [
@@ -144,6 +150,12 @@ class AppointmentCard extends StatelessWidget {
                   const PopupMenuItem(
                     value: 'reagendar',
                     child: Text('Reagendar',
+                        style: TextStyle(color: AppColors.textPrimary)),
+                  ),
+                if (onHide != null)
+                  const PopupMenuItem(
+                    value: 'ocultar',
+                    child: Text('Ocultar da Home',
                         style: TextStyle(color: AppColors.textPrimary)),
                   ),
                 if (onDelete != null)

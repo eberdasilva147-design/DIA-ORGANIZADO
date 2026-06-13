@@ -4,6 +4,19 @@ Histórico das entregas importantes. Atualizado a cada marco.
 Formato: data (AAAA-MM-DD) + resumo do que mudou.
 
 ## [Não lançado]
+### Fase 1 — Usabilidade e consistência (concluída)
+- Tarefas: excluir tarefa concluída; botão "Reagendar" nas pendentes; campo
+  Observação e Antecedência do lembrete (no horário até 1 dia antes + personalizado).
+- Notas: editar e excluir em cada nota.
+- Agenda: indicadores de status (atrasado/hoje/confirmado/pendente), menu
+  editar/reagendar/excluir, exclusão com confirmação, edição de compromisso e
+  navegação por gestos (deslizar troca o mês).
+- Home: "Compromissos de Hoje", nova seção "Atividades dos próximos 5 dias",
+  "Todos os Compromissos", opção de ocultar item da Home (permanece em
+  Agenda/Tarefas) e botão "Nova Tarefa" com destaque premium.
+- Dados: novos campos (observacao, lembrete_min_antes, ocultar_da_home,
+  confirmado) nos modelos e no Supabase; updateAppointment na camada de dados.
+
 ### Governança
 - Adotada estrutura de governança: `ROADMAP.md` (roadmap oficial + backlog + correções)
   e `CHANGELOG.md`. Todo novo pedido é classificado antes de implementar; nada é descartado.

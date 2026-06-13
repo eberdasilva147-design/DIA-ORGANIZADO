@@ -9,6 +9,7 @@ class TaskCard extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onDelete; // mostra ícone de excluir quando informado
   final VoidCallback? onReschedule; // mostra botão "Reagendar" quando informado
+  final VoidCallback? onHide; // mostra ícone "ocultar da Home" quando informado
   final bool showDate;
 
   const TaskCard({
@@ -18,6 +19,7 @@ class TaskCard extends StatelessWidget {
     this.onTap,
     this.onDelete,
     this.onReschedule,
+    this.onHide,
     this.showDate = true,
   });
 
@@ -142,6 +144,13 @@ class TaskCard extends StatelessWidget {
                     ),
                     child:
                         const Icon(Icons.check, size: 18, color: Colors.white),
+                  ),
+                if (onHide != null)
+                  IconButton(
+                    icon: const Icon(Icons.visibility_off_outlined,
+                        color: AppColors.textSecondary, size: 20),
+                    onPressed: onHide,
+                    tooltip: 'Ocultar da Home',
                   ),
                 if (onDelete != null)
                   IconButton(
