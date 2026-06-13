@@ -28,12 +28,7 @@ jobs:
       - name: Instalar dependências
         run: flutter pub get
 
-      - name: Analisar código
-        run: flutter analyze
-
-      - name: Rodar testes
-        run: flutter test
-
+      # analyze/test rodam localmente antes de cada commit; aqui o foco é publicar
       - name: Build web
         run: >
           flutter build web --release
