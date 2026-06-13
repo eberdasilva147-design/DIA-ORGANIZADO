@@ -30,11 +30,10 @@ class _VoiceScreenState extends State<VoiceScreen>
   bool _processed = false;
   String _transcript = '';
   String _feedback = '';
-  String _status = '';
   String _source = ''; // 'ai' | 'basic' — origem da última resposta
   AiVoiceService? _ai;
-  bool _conversationMode = false; // mic reabre sozinho após a resposta
-  bool _muteWhileSpeaking = true; // mic mudo enquanto a IA fala
+  bool _conversationActive = false; // conversa hands-free iniciada
+  bool _paused = false; // usuário tocou no ícone 🔇
   late AnimationController _pulseCtrl;
 
   @override
@@ -53,16 +52,20 @@ class _VoiceScreenState extends State<VoiceScreen>
         debugPrint('STT erro: ${e.errorMsg} (permanente: ${e.permanent})');
         if (!mounted) return;
         setState(() => _listening = false);
-        // 'no-speech' não é um erro real: o usuário só ficou em silêncio
-        _say(e.errorMsg == 'no-speech' || e.errorMsg == 'error_no_match'
-            ? 'Não ouvi nada. Verifique se o microfone certo está '
-                'selecionado no Windows e tente de novo.'
-            : '⚠️ Erro no microfone: ${e.errorMsg}');
+        // 'no-speech'/'no-match': só silêncio — em conversa, volta a ouvir
+        if (e.errorMsg == 'no-speech' || e.errorMsg == 'error_no_match') {
+          _scheduleRelisten();
+          return;
+        }
+        // Erro real: encerra a conversa e avisa (sem ficar em loop)
+        setState(() {
+          _conversationActive = false;
+          _feedback = '⚠️ Erro no microfone: ${e.errorMsg}';
+        });
       },
       onStatus: (status) {
         debugPrint('STT status: $status | transcript: "$_transcript"');
         if (!mounted) return;
-        setState(() => _status = status);
         // No Chrome o "finalResult" às vezes nunca chega; quando o
         // reconhecimento termina, processa o que foi capturado.
         if (status == 'done' || status == 'notListening') {
@@ -70,6 +73,9 @@ class _VoiceScreenState extends State<VoiceScreen>
           if (_transcript.isNotEmpty && !_processed) {
             _processed = true;
             _processCommand(_transcript);
+          } else if (_transcript.isEmpty) {
+            // Silêncio: mantém ouvindo (conversa contínua)
+            _scheduleRelisten();
           }
         }
       },
@@ -87,51 +93,76 @@ class _VoiceScreenState extends State<VoiceScreen>
     super.dispose();
   }
 
-  Future<void> _toggleListening() async {
+  /// Microfone principal: inicia (ou reinicia) a conversa hands-free.
+  Future<void> _startConversation() async {
     if (!_available) {
       setState(() => _feedback =
           'Microfone não disponível neste navegador. Use o campo de texto abaixo.');
       return;
     }
-    if (_listening) {
-      await _speech.stop();
-      setState(() => _listening = false);
-      // Se o usuário parou manualmente, processa o que já foi dito
-      if (_transcript.isNotEmpty && !_processed) {
-        _processed = true;
-        _processCommand(_transcript);
-      }
+    _ai?.resetConversation();
+    setState(() {
+      _conversationActive = true;
+      _paused = false;
+      _feedback = '';
+      _source = '';
+      _transcript = '';
+    });
+    await _startListening();
+  }
+
+  /// Abre uma sessão de escuta. O navegador encerra após a pausa; o ciclo
+  /// é mantido por _scheduleRelisten (após silêncio ou após a IA falar).
+  Future<void> _startListening() async {
+    if (!_available || !_conversationActive || _paused || _listening) return;
+    await TtsService().stop(); // garante mic sem eco
+    if (!mounted) return;
+    setState(() {
+      _listening = true;
+      _processed = false;
+      _transcript = '';
+      if (_feedback.isEmpty) _feedback = 'Ouvindo...';
+    });
+    await _speech.listen(
+      onResult: (r) {
+        if (!mounted) return;
+        setState(() => _transcript = r.recognizedWords);
+        if (r.finalResult && !_processed) {
+          _processed = true;
+          setState(() => _listening = false);
+          _processCommand(r.recognizedWords);
+        }
+      },
+      listenOptions: SpeechListenOptions(
+        // Navegador usa hífen (pt-BR); Android/iOS usam underscore (pt_BR)
+        localeId: kIsWeb ? 'pt-BR' : 'pt_BR',
+        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 2),
+        partialResults: true,
+        cancelOnError: true,
+      ),
+    );
+  }
+
+  /// Reabre a escuta após um pequeno intervalo, se a conversa segue ativa.
+  void _scheduleRelisten() {
+    if (!_conversationActive || _paused) return;
+    Future.delayed(const Duration(milliseconds: 350), () {
+      if (!mounted || !_conversationActive || _paused || _listening) return;
+      _startListening();
+    });
+  }
+
+  /// Ícone inferior 🎤/🔇: pausa ou retoma a escuta contínua.
+  Future<void> _togglePause() async {
+    if (_paused) {
+      setState(() => _paused = false);
+      await _startListening();
     } else {
-      // Cala a resposta falada antes de ouvir, senão o app escuta a si mesmo
+      setState(() => _paused = true);
+      await _speech.stop();
       await TtsService().stop();
-      setState(() {
-        _listening = true;
-        _processed = false;
-        _transcript = '';
-        _feedback = 'Ouvindo...';
-      });
-      await _speech.listen(
-        onResult: (r) {
-          debugPrint(
-              'STT resultado: "${r.recognizedWords}" (final: ${r.finalResult})');
-          if (!mounted) return;
-          setState(() => _transcript = r.recognizedWords);
-          if (r.finalResult && !_processed) {
-            _processed = true;
-            _processCommand(r.recognizedWords);
-            setState(() => _listening = false);
-          }
-        },
-        listenOptions: SpeechListenOptions(
-          // Navegador usa hífen (pt-BR); Android/iOS usam underscore (pt_BR)
-          localeId: kIsWeb ? 'pt-BR' : 'pt_BR',
-          listenFor: const Duration(seconds: 30),
-          // 2s de silêncio já encerra a fala (3s deixava lento)
-          pauseFor: const Duration(seconds: 2),
-          partialResults: true,
-          cancelOnError: true,
-        ),
-      );
+      if (mounted) setState(() => _listening = false);
     }
   }
 
@@ -298,13 +329,22 @@ class _VoiceScreenState extends State<VoiceScreen>
     return null;
   }
 
-  /// Mostra a resposta na tela e fala em voz alta
-  /// (a menos que o som esteja desligado nas configurações).
+  /// Mostra a resposta na tela, fala em voz alta e — em conversa contínua —
+  /// reabre o microfone quando a fala termina.
   void _say(String msg) {
+    if (!mounted) return;
     setState(() => _feedback = msg);
-    if (context.read<SettingsProvider>().sound) {
-      TtsService().speak(msg);
+    _speakThenRelisten(msg);
+  }
+
+  Future<void> _speakThenRelisten(String msg) async {
+    final sound = context.read<SettingsProvider>().sound;
+    if (sound) {
+      // speak() completa quando a fala termina (mic já parado, sem eco)
+      await TtsService().speak(msg);
     }
+    if (!mounted) return;
+    _scheduleRelisten();
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -341,8 +381,7 @@ class _VoiceScreenState extends State<VoiceScreen>
     try {
       final reply = await _ai!.process(text);
       if (!mounted) return;
-      setState(() => _feedback = '✅ $reply');
-      await _speakAndMaybeContinue(reply);
+      _say('✅ $reply');
     } on AiQuotaException {
       if (!mounted) return;
       setState(() => _source = 'basic');
@@ -354,24 +393,6 @@ class _VoiceScreenState extends State<VoiceScreen>
       setState(() => _source = 'basic');
       _processCommandOffline(text);
     }
-  }
-
-  /// Fala a resposta e, no modo conversa, reabre o microfone em seguida.
-  Future<void> _speakAndMaybeContinue(String reply) async {
-    final sound = context.read<SettingsProvider>().sound;
-
-    // Opção do usuário: ouvir ENQUANTO ela fala (risco de eco, escolha dele)
-    if (_conversationMode && !_muteWhileSpeaking && !_listening) {
-      await _toggleListening();
-    }
-
-    if (sound) {
-      // speak() só completa quando a fala termina (mic mudo nesse período)
-      await TtsService().speak(reply);
-    }
-
-    if (!mounted || !_conversationMode) return;
-    if (!_listening) await _toggleListening();
   }
 
   /// Interpretador por regras (offline/fallback) — comandos conhecidos.
@@ -636,111 +657,80 @@ class _VoiceScreenState extends State<VoiceScreen>
               ),
               const SizedBox(height: 8),
               const Text(
-                'Toque no microfone e fale seu comando',
+                'Toque para iniciar — depois é só conversar',
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
               ),
               const SizedBox(height: 32),
 
-              // Mic button
-              AnimatedBuilder(
-                animation: _pulseCtrl,
-                builder: (_, child) => Container(
-                  width: 110,
-                  height: 110,
+              // Microfone principal — inicia (ou reinicia) a conversa
+              GestureDetector(
+                onTap: _startConversation,
+                child: Container(
+                  width: 90,
+                  height: 90,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: _listening
-                        ? AppColors.error.withValues(
-                            alpha: 0.1 + _pulseCtrl.value * 0.15)
-                        : Colors.transparent,
-                  ),
-                  child: child,
-                ),
-                child: GestureDetector(
-                  onTap: _toggleListening,
-                  child: Container(
-                    width: 90,
-                    height: 90,
-                    margin: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(
-                        colors: _listening
-                            ? [AppColors.error, AppColors.error.withValues(alpha: 0.7)]
-                            : [AppColors.gold, AppColors.primary],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                    gradient: const LinearGradient(
+                      colors: [AppColors.gold, AppColors.primary],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.gold.withValues(alpha: 0.5),
+                        blurRadius: 20,
+                        spreadRadius: 4,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: (_listening ? AppColors.error : AppColors.gold)
-                              .withValues(alpha: 0.5),
-                          blurRadius: 20,
-                          spreadRadius: 4,
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      _listening ? Icons.stop_rounded : Icons.mic_rounded,
-                      size: 44,
-                      color: Colors.white,
-                    ),
+                    ],
                   ),
+                  child: const Icon(Icons.mic_rounded,
+                      size: 44, color: Colors.white),
                 ),
               ),
 
-              if (_listening) ...[
-                const SizedBox(height: 10),
+              // Indicador/controle inferior 🎤/🔇 (só durante a conversa)
+              if (_conversationActive) ...[
+                const SizedBox(height: 18),
+                GestureDetector(
+                  onTap: _togglePause,
+                  child: AnimatedBuilder(
+                    animation: _pulseCtrl,
+                    builder: (_, __) {
+                      final active = !_paused;
+                      final color =
+                          active ? AppColors.success : AppColors.textSecondary;
+                      return Container(
+                        width: 54,
+                        height: 54,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: color.withValues(
+                              alpha: active
+                                  ? 0.12 + _pulseCtrl.value * 0.12
+                                  : 0.10),
+                          border: Border.all(color: color, width: 2),
+                        ),
+                        child: Icon(
+                          active ? Icons.mic_rounded : Icons.mic_off_rounded,
+                          color: color,
+                          size: 26,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 6),
                 Text(
-                  _status == 'listening'
-                      ? '🎙️ Capturando áudio... fale agora'
-                      : 'Status: $_status',
-                  style: const TextStyle(
-                      color: AppColors.textSecondary, fontSize: 11),
+                  _paused ? 'Pausado — toque para retomar' : 'Ouvindo...',
+                  style: TextStyle(
+                    color:
+                        _paused ? AppColors.textSecondary : AppColors.success,
+                    fontSize: 11,
+                  ),
                 ),
               ],
 
-              // Modo conversa contínua
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.forum_outlined,
-                      size: 16, color: AppColors.accent),
-                  const SizedBox(width: 6),
-                  const Text(
-                    'Conversa contínua',
-                    style: TextStyle(
-                        color: AppColors.textPrimary, fontSize: 13),
-                  ),
-                  Switch(
-                    value: _conversationMode,
-                    onChanged: (v) =>
-                        setState(() => _conversationMode = v),
-                  ),
-                ],
-              ),
-              if (_conversationMode)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.mic_off_outlined,
-                        size: 14, color: AppColors.textSecondary),
-                    const SizedBox(width: 6),
-                    const Text(
-                      'Silenciar mic enquanto ela fala',
-                      style: TextStyle(
-                          color: AppColors.textSecondary, fontSize: 12),
-                    ),
-                    Switch(
-                      value: _muteWhileSpeaking,
-                      onChanged: (v) =>
-                          setState(() => _muteWhileSpeaking = v),
-                    ),
-                  ],
-                ),
-
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
 
               // Transcription
               if (_transcript.isNotEmpty)
