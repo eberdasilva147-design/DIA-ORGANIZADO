@@ -128,8 +128,6 @@ class HomeScreen extends StatelessWidget {
     final tasks = context.watch<TaskProvider>();
     final appointments = context.watch<AppointmentProvider>();
     final verses = context.watch<VerseProvider>();
-    final nextReminder = tasks.nextReminder;
-
     final now = DateTime.now();
     final startToday = DateTime(now.year, now.month, now.day);
     final startTomorrow = startToday.add(const Duration(days: 1));
@@ -285,52 +283,6 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ),
 
-                if (nextReminder != null && !nextReminder.ocultarDaHome) ...[
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: AppColors.warning.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: AppColors.warning.withValues(alpha: 0.4)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.notifications_active,
-                            color: AppColors.warning, size: 22),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                l.nextReminder,
-                                style: TextStyle(
-                                    color: AppColors.warning,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600),
-                              ),
-                              Text(
-                                nextReminder.nome,
-                                style: TextStyle(
-                                    color: context.colors.textPrimary,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600),
-                              ),
-                              Text(
-                                '${nextReminder.horario}  ${nextReminder.data}',
-                                style: TextStyle(
-                                    color: context.colors.textSecondary,
-                                    fontSize: 12),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
 
                 const SizedBox(height: 20),
                 _sectionTitle(context,
