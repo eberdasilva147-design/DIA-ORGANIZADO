@@ -4,16 +4,19 @@ import 'package:provider/provider.dart';
 import '../../models/note_model.dart';
 import '../../providers/note_provider.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/dia_colors.dart';
+import '../../utils/l10n_ext.dart';
 
 class NotesScreen extends StatelessWidget {
-  const NotesScreen({super.key});
+  NotesScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       appBar: AppBar(
-        title: const Text('Notas Rápidas'),
+        title: Text(l.notesTitle),
         actions: [
           IconButton(
             icon: const Icon(Icons.add_circle_outline, color: AppColors.accent),
@@ -27,21 +30,21 @@ class NotesScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: TextField(
               onChanged: context.read<NoteProvider>().setSearch,
-              style: const TextStyle(color: AppColors.textPrimary),
+              style: TextStyle(color: context.colors.textPrimary),
               decoration: InputDecoration(
-                hintText: 'Buscar notas...',
+                hintText: l.searchHint,
                 prefixIcon:
-                    const Icon(Icons.search, color: AppColors.textSecondary),
-                fillColor: AppColors.card,
+                    Icon(Icons.search, color: context.colors.textSecondary),
+                fillColor: context.colors.card,
                 filled: true,
                 contentPadding: const EdgeInsets.symmetric(vertical: 12),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.border),
+                  borderSide: BorderSide(color: context.colors.border),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.border),
+                  borderSide: BorderSide(color: context.colors.border),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -56,15 +59,15 @@ class NotesScreen extends StatelessWidget {
               builder: (_, provider, __) {
                 final notes = provider.notes;
                 if (notes.isEmpty) {
-                  return const Center(
+                  return Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.sticky_note_2_outlined,
-                            size: 56, color: AppColors.textSecondary),
+                            size: 56, color: context.colors.textSecondary),
                         SizedBox(height: 12),
-                        Text('Nenhuma nota encontrada.',
-                            style: TextStyle(color: AppColors.textSecondary)),
+                        Text(l.noNotes,
+                            style: TextStyle(color: context.colors.textSecondary)),
                       ],
                     ),
                   );
@@ -85,14 +88,12 @@ class NotesScreen extends StatelessWidget {
         onPressed: () => showNoteModal(context),
         backgroundColor: AppColors.primary,
         icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('Nova nota', style: TextStyle(color: Colors.white)),
+        label: Text(l.newNoteFab, style: const TextStyle(color: Colors.white)),
       ),
     );
   }
-
 }
 
-/// Abre o modal de nota (criação ou, se [note] informada, edição).
 void showNoteModal(BuildContext context, {NoteModel? note}) {
   showModalBottomSheet(
     context: context,
@@ -108,27 +109,28 @@ void showNoteModal(BuildContext context, {NoteModel? note}) {
 class _NoteCard extends StatelessWidget {
   final NoteModel note;
 
-  const _NoteCard({required this.note});
+  _NoteCard({required this.note});
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     return GestureDetector(
       onLongPress: () => _confirmDelete(context),
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: AppColors.card,
+          color: context.colors.card,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.border),
+          border: Border.all(color: context.colors.border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               note.titulo,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
+              style: TextStyle(
+                color: context.colors.textPrimary,
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
               ),
@@ -139,8 +141,8 @@ class _NoteCard extends StatelessWidget {
                 note.corpo,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    color: AppColors.textSecondary, fontSize: 13),
+                style: TextStyle(
+                    color: context.colors.textSecondary, fontSize: 13),
               ),
             ],
             const SizedBox(height: 6),
@@ -148,15 +150,15 @@ class _NoteCard extends StatelessWidget {
               children: [
                 Text(
                   DateFormat('dd/MM/yyyy HH:mm').format(note.dataCriacao),
-                  style: const TextStyle(
-                      color: AppColors.textSecondary, fontSize: 11),
+                  style: TextStyle(
+                      color: context.colors.textSecondary, fontSize: 11),
                 ),
                 const Spacer(),
                 TextButton.icon(
                   onPressed: () => showNoteModal(context, note: note),
                   icon: const Icon(Icons.edit_outlined,
                       size: 16, color: AppColors.accent),
-                  label: const Text('Editar',
+                  label: Text(l.actionEdit,
                       style: TextStyle(color: AppColors.accent, fontSize: 13)),
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -166,9 +168,9 @@ class _NoteCard extends StatelessWidget {
                 ),
                 IconButton(
                   onPressed: () => _confirmDelete(context),
-                  icon: const Icon(Icons.delete_outline,
-                      size: 18, color: AppColors.textSecondary),
-                  tooltip: 'Excluir',
+                  icon: Icon(Icons.delete_outline,
+                      size: 18, color: context.colors.textSecondary),
+                  tooltip: l.actionDelete,
                   visualDensity: VisualDensity.compact,
                 ),
               ],
@@ -180,26 +182,27 @@ class _NoteCard extends StatelessWidget {
   }
 
   void _confirmDelete(BuildContext context) {
+    final l = context.l10n;
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: AppColors.card,
-        title: const Text('Excluir nota',
-            style: TextStyle(color: AppColors.textPrimary)),
-        content: const Text('Deseja excluir esta nota?',
-            style: TextStyle(color: AppColors.textSecondary)),
+        backgroundColor: context.colors.card,
+        title: Text(l.moveToTrash,
+            style: TextStyle(color: context.colors.textPrimary)),
+        content: Text(l.moveToTrashNoteMsg,
+            style: TextStyle(color: context.colors.textSecondary)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar'),
+            child: Text(l.cancel),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              context.read<NoteProvider>().deleteNote(note.id);
+              context.read<NoteProvider>().softDeleteNote(note.id);
             },
-            child: const Text('Excluir',
-                style: TextStyle(color: AppColors.error)),
+            child: Text(l.actionDelete,
+                style: const TextStyle(color: AppColors.error)),
           ),
         ],
       ),
@@ -208,7 +211,6 @@ class _NoteCard extends StatelessWidget {
 }
 
 class _NoteCreateModal extends StatefulWidget {
-  /// Se informada, abre em modo edição.
   final NoteModel? note;
   const _NoteCreateModal({this.note});
 
@@ -260,11 +262,12 @@ class _NoteCreateModalState extends State<_NoteCreateModal> {
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
-        decoration: const BoxDecoration(
-          color: AppColors.backgroundSecondary,
+        decoration: BoxDecoration(
+          color: context.colors.backgroundSecondary,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
@@ -276,30 +279,30 @@ class _NoteCreateModalState extends State<_NoteCreateModal> {
               child: Container(
                 width: 40, height: 4,
                 decoration: BoxDecoration(
-                    color: AppColors.border,
+                    color: context.colors.border,
                     borderRadius: BorderRadius.circular(2)),
               ),
             ),
             const SizedBox(height: 16),
-            Text(_isEditing ? 'Editar Nota' : 'Nova Nota',
-                style: const TextStyle(
-                    color: AppColors.textPrimary,
+            Text(_isEditing ? l.editNoteTitle : l.newNoteTitle,
+                style: TextStyle(
+                    color: context.colors.textPrimary,
                     fontSize: 18,
                     fontWeight: FontWeight.w700)),
             const SizedBox(height: 16),
             TextField(
               controller: _titleCtrl,
               autofocus: true,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: const InputDecoration(hintText: 'Título'),
+              style: TextStyle(color: context.colors.textPrimary),
+              decoration: InputDecoration(hintText: l.noteTitleHint),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _bodyCtrl,
               maxLines: 4,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: const InputDecoration(
-                hintText: 'Conteúdo da nota...',
+              style: TextStyle(color: context.colors.textPrimary),
+              decoration: InputDecoration(
+                hintText: l.noteContentHint,
                 alignLabelWithHint: true,
               ),
             ),
@@ -308,7 +311,7 @@ class _NoteCreateModalState extends State<_NoteCreateModal> {
               onPressed: _save,
               style: ElevatedButton.styleFrom(
                   minimumSize: const Size.fromHeight(48)),
-              child: Text(_isEditing ? 'Salvar alterações' : 'Salvar nota'),
+              child: Text(_isEditing ? l.saveChanges : l.saveNote),
             ),
           ],
         ),

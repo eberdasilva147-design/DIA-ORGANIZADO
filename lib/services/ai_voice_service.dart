@@ -1,6 +1,7 @@
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../models/note_model.dart';
 import '../providers/task_provider.dart';
 import '../providers/appointment_provider.dart';
 import '../providers/note_provider.dart';
@@ -144,7 +145,7 @@ class AiVoiceService {
         if (id != null) await tasks.completeTask(id);
       case 'delete_task':
         final id = a['id'] as String?;
-        if (id != null) await tasks.deleteTask(id);
+        if (id != null) await tasks.softDeleteTask(id);
       case 'reschedule_task':
         final id = a['id'] as String?;
         if (id != null) {
@@ -179,7 +180,7 @@ class AiVoiceService {
         );
       case 'delete_appointment':
         final id = a['id'] as String?;
-        if (id != null) await appointments.deleteAppointment(id);
+        if (id != null) await appointments.softDeleteAppointment(id);
       case 'create_note':
         final corpo = (a['corpo'] as String?) ?? '';
         await notes.addNote(
@@ -187,6 +188,54 @@ class AiVoiceService {
               (corpo.length > 40 ? '${corpo.substring(0, 40)}...' : corpo),
           corpo: corpo,
         );
+      case 'edit_task':
+        final id = a['id'] as String?;
+        if (id == null) break;
+        final t = tasks.tasks.firstWhere((x) => x.id == id,
+            orElse: () => throw Exception('task not found'));
+        await tasks.updateTask(t.copyWith(
+          nome: (a['nome'] as String?) ?? t.nome,
+          data: (a['data'] as String?) ?? t.data,
+          horario: (a['horario'] as String?) ?? t.horario,
+          prioridade: (a['prioridade'] as String?) ?? t.prioridade,
+        ));
+      case 'edit_appointment':
+        final id = a['id'] as String?;
+        if (id == null) break;
+        final ap = appointments.appointments.firstWhere((x) => x.id == id,
+            orElse: () => throw Exception('appointment not found'));
+        DateTime? newDate;
+        final dataStr = a['data'] as String?;
+        if (dataStr != null) {
+          final parts = dataStr.split('/');
+          if (parts.length == 3) {
+            newDate = DateTime(
+                int.parse(parts[2]), int.parse(parts[1]), int.parse(parts[0]));
+          }
+        }
+        await appointments.updateAppointment(ap.copyWith(
+          titulo: (a['titulo'] as String?) ?? ap.titulo,
+          horario: (a['horario'] as String?) ?? ap.horario,
+          local: (a['local'] as String?) ?? ap.local,
+          prioridade: (a['prioridade'] as String?) ?? ap.prioridade,
+          dia: newDate?.day ?? ap.dia,
+          mes: newDate?.month ?? ap.mes,
+          ano: newDate?.year ?? ap.ano,
+        ));
+      case 'edit_note':
+        final id = a['id'] as String?;
+        if (id == null) break;
+        final n = notes.notes.firstWhere((x) => x.id == id,
+            orElse: () => throw Exception('note not found'));
+        await notes.updateNote(NoteModel(
+          id: n.id,
+          titulo: (a['titulo'] as String?) ?? n.titulo,
+          corpo: (a['corpo'] as String?) ?? n.corpo,
+          dataCriacao: n.dataCriacao,
+        ));
+      case 'restore_task':
+        final id = a['id'] as String?;
+        if (id != null) await tasks.restoreTask(id);
       default:
         break; // 'none' ou tipo desconhecido
     }

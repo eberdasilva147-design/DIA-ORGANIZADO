@@ -3,6 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../utils/app_colors.dart';
+import '../utils/dia_colors.dart';
+import '../utils/l10n_ext.dart';
 import 'auth/login_screen.dart';
 import 'main_scaffold.dart';
 
@@ -43,7 +45,7 @@ class _SplashScreenState extends State<SplashScreen>
     ]);
     if (!mounted) return;
     Navigator.of(context).pushReplacement(MaterialPageRoute(
-      builder: (_) => auth.isLoggedIn ? const MainScaffold() : const LoginScreen(),
+      builder: (_) => auth.isLoggedIn ? MainScaffold() : const LoginScreen(),
     ));
   }
 
@@ -56,7 +58,7 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: Center(
         child: FadeTransition(
           opacity: _fade,
@@ -87,9 +89,9 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  'Dia Organizado',
+                  context.l10n.appTitle,
                   style: GoogleFonts.notoSerif(
-                    color: AppColors.textPrimary,
+                    color: context.colors.textPrimary,
                     fontSize: 30,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.5,
@@ -97,9 +99,9 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Seu dia, do seu jeito.',
+                  context.l10n.tagline,
                   style: GoogleFonts.plusJakartaSans(
-                    color: AppColors.textSecondary,
+                    color: context.colors.textSecondary,
                     fontSize: 14,
                   ),
                 ),

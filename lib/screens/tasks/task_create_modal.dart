@@ -4,9 +4,10 @@ import 'package:provider/provider.dart';
 import '../../models/task_model.dart';
 import '../../providers/task_provider.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/dia_colors.dart';
+import '../../utils/l10n_ext.dart';
 
 class TaskCreateModal extends StatefulWidget {
-  /// Se informada, o modal abre em modo edição com os campos preenchidos.
   final TaskModel? task;
 
   const TaskCreateModal({super.key, this.task});
@@ -34,18 +35,9 @@ class _TaskCreateModalState extends State<TaskCreateModal> {
   TimeOfDay _selectedTime = TimeOfDay.now();
   String _priority = 'm';
   bool _reminder = false;
-  int _lembreteMinAntes = 0; // antecedência do lembrete (minutos)
+  int _lembreteMinAntes = 0;
 
-  // Opções de antecedência (minutos → rótulo)
-  static const Map<int, String> _antecedencias = {
-    0: 'No horário',
-    5: '5 minutos antes',
-    15: '15 minutos antes',
-    30: '30 minutos antes',
-    60: '1 hora antes',
-    120: '2 horas antes',
-    1440: '1 dia antes',
-  };
+  static const _reminderKeys = [0, 5, 15, 30, 60, 120, 1440];
 
   bool get _isEditing => widget.task != null;
 
@@ -74,30 +66,42 @@ class _TaskCreateModalState extends State<TaskCreateModal> {
     super.dispose();
   }
 
-  String _antecedenciaLabel(int min) =>
-      _antecedencias[min] ?? '$min minutos antes';
+  String _antecedenciaLabel(int min) {
+    final l = context.l10n;
+    switch (min) {
+      case 0:   return l.reminderAtTime;
+      case 5:   return l.reminder5Min;
+      case 15:  return l.reminder15Min;
+      case 30:  return l.reminder30Min;
+      case 60:  return l.reminder1h;
+      case 120: return l.reminder2h;
+      case 1440: return l.reminder1Day;
+      default:  return l.minBefore(min);
+    }
+  }
 
   Future<void> _pickAntecedencia() async {
+    final l = context.l10n;
     final escolha = await showModalBottomSheet<int>(
       context: context,
-      backgroundColor: AppColors.card,
+      backgroundColor: context.colors.card,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (_) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            for (final e in _antecedencias.entries)
+            for (final key in _reminderKeys)
               ListTile(
-                title: Text(e.value,
-                    style: const TextStyle(color: AppColors.textPrimary)),
-                trailing: _lembreteMinAntes == e.key
+                title: Text(_antecedenciaLabel(key),
+                    style: TextStyle(color: context.colors.textPrimary)),
+                trailing: _lembreteMinAntes == key
                     ? const Icon(Icons.check, color: AppColors.gold)
                     : null,
-                onTap: () => Navigator.pop(context, e.key),
+                onTap: () => Navigator.pop(context, key),
               ),
             ListTile(
-              title: const Text('Personalizado…',
+              title: Text(l.reminderCustom,
                   style: TextStyle(color: AppColors.accent)),
               onTap: () => Navigator.pop(context, -1),
             ),
@@ -114,29 +118,30 @@ class _TaskCreateModalState extends State<TaskCreateModal> {
   }
 
   Future<void> _pickCustomAntecedencia() async {
+    final l = context.l10n;
     final ctrl = TextEditingController(
         text: _lembreteMinAntes > 0 ? '$_lembreteMinAntes' : '');
     final min = await showDialog<int>(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: AppColors.card,
-        title: const Text('Antecedência (minutos)',
-            style: TextStyle(color: AppColors.textPrimary)),
+        backgroundColor: context.colors.card,
+        title: Text(l.leadTimeMinutes,
+            style: TextStyle(color: context.colors.textPrimary)),
         content: TextField(
           controller: ctrl,
           keyboardType: TextInputType.number,
           autofocus: true,
-          style: const TextStyle(color: AppColors.textPrimary),
-          decoration: const InputDecoration(hintText: 'Ex.: 45'),
+          style: TextStyle(color: context.colors.textPrimary),
+          decoration: InputDecoration(hintText: l.leadTimeHint),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar')),
+              child: Text(l.cancel)),
           TextButton(
               onPressed: () =>
                   Navigator.pop(context, int.tryParse(ctrl.text.trim())),
-              child: const Text('OK')),
+              child: Text(l.ok)),
         ],
       ),
     );
@@ -148,7 +153,6 @@ class _TaskCreateModalState extends State<TaskCreateModal> {
     final d = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
-      // Em edição, a tarefa pode estar atrasada (data no passado)
       firstDate: _selectedDate.isBefore(now) ? _selectedDate : now,
       lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
       builder: (ctx, child) => Theme(
@@ -208,12 +212,13 @@ class _TaskCreateModalState extends State<TaskCreateModal> {
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     return Padding(
       padding:
           EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
-        decoration: const BoxDecoration(
-          color: AppColors.backgroundSecondary,
+        decoration: BoxDecoration(
+          color: context.colors.backgroundSecondary,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
@@ -226,25 +231,25 @@ class _TaskCreateModalState extends State<TaskCreateModal> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                    color: AppColors.border,
+                    color: context.colors.border,
                     borderRadius: BorderRadius.circular(2)),
               ),
             ),
             const SizedBox(height: 16),
-            Text(_isEditing ? 'Editar Tarefa' : 'Nova Tarefa',
-                style: const TextStyle(
-                    color: AppColors.textPrimary,
+            Text(_isEditing ? l.editTask : l.newTask,
+                style: TextStyle(
+                    color: context.colors.textPrimary,
                     fontSize: 18,
                     fontWeight: FontWeight.w700)),
             const SizedBox(height: 16),
             TextField(
               controller: _nameCtrl,
               autofocus: true,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: const InputDecoration(
-                hintText: 'Nome da tarefa',
+              style: TextStyle(color: context.colors.textPrimary),
+              decoration: InputDecoration(
+                hintText: l.taskNameHint,
                 prefixIcon:
-                    Icon(Icons.task_alt, color: AppColors.textSecondary),
+                    Icon(Icons.task_alt, color: context.colors.textSecondary),
               ),
             ),
             const SizedBox(height: 12),
@@ -252,11 +257,11 @@ class _TaskCreateModalState extends State<TaskCreateModal> {
               controller: _obsCtrl,
               minLines: 1,
               maxLines: 3,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: const InputDecoration(
-                hintText: 'Observação (opcional)',
+              style: TextStyle(color: context.colors.textPrimary),
+              decoration: InputDecoration(
+                hintText: l.observationHint,
                 prefixIcon:
-                    Icon(Icons.notes_rounded, color: AppColors.textSecondary),
+                    Icon(Icons.notes_rounded, color: context.colors.textSecondary),
               ),
             ),
             const SizedBox(height: 12),
@@ -269,19 +274,19 @@ class _TaskCreateModalState extends State<TaskCreateModal> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 14),
                       decoration: BoxDecoration(
-                        color: AppColors.card,
+                        color: context.colors.card,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.border),
+                        border: Border.all(color: context.colors.border),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.calendar_today,
-                              size: 16, color: AppColors.textSecondary),
+                          Icon(Icons.calendar_today,
+                              size: 16, color: context.colors.textSecondary),
                           const SizedBox(width: 8),
                           Text(
                             DateFormat('dd/MM/yyyy').format(_selectedDate),
-                            style: const TextStyle(
-                                color: AppColors.textPrimary, fontSize: 14),
+                            style: TextStyle(
+                                color: context.colors.textPrimary, fontSize: 14),
                           ),
                         ],
                       ),
@@ -296,19 +301,19 @@ class _TaskCreateModalState extends State<TaskCreateModal> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 14),
                       decoration: BoxDecoration(
-                        color: AppColors.card,
+                        color: context.colors.card,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.border),
+                        border: Border.all(color: context.colors.border),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.schedule,
-                              size: 16, color: AppColors.textSecondary),
+                          Icon(Icons.schedule,
+                              size: 16, color: context.colors.textSecondary),
                           const SizedBox(width: 8),
                           Text(
                             '${_selectedTime.hour.toString().padLeft(2, '0')}:${_selectedTime.minute.toString().padLeft(2, '0')}',
-                            style: const TextStyle(
-                                color: AppColors.textPrimary, fontSize: 14),
+                            style: TextStyle(
+                                color: context.colors.textPrimary, fontSize: 14),
                           ),
                         ],
                       ),
@@ -318,25 +323,25 @@ class _TaskCreateModalState extends State<TaskCreateModal> {
               ],
             ),
             const SizedBox(height: 12),
-            const Text('Prioridade',
+            Text(l.priority,
                 style: TextStyle(
-                    color: AppColors.textSecondary, fontSize: 13)),
+                    color: context.colors.textSecondary, fontSize: 13)),
             const SizedBox(height: 8),
             Row(
               children: [
-                _priorityChip('h', 'Alta', AppColors.priorityHigh),
+                _priorityChip('h', l.priorityHigh, AppColors.priorityHigh),
                 const SizedBox(width: 8),
-                _priorityChip('m', 'Média', AppColors.priorityMedium),
+                _priorityChip('m', l.priorityMedium, AppColors.priorityMedium),
                 const SizedBox(width: 8),
-                _priorityChip('l', 'Baixa', AppColors.priorityLow),
+                _priorityChip('l', l.priorityLow, AppColors.priorityLow),
               ],
             ),
             const SizedBox(height: 12),
             Row(
               children: [
-                const Text('Ativar lembrete',
-                    style: TextStyle(color: AppColors.textPrimary)),
-                const Spacer(),
+                Text(l.enableReminder,
+                    style: TextStyle(color: context.colors.textPrimary)),
+                Spacer(),
                 Switch(
                   value: _reminder,
                   onChanged: (v) => setState(() => _reminder = v),
@@ -351,28 +356,28 @@ class _TaskCreateModalState extends State<TaskCreateModal> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 14),
                   decoration: BoxDecoration(
-                    color: AppColors.card,
+                    color: context.colors.card,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.border),
+                    border: Border.all(color: context.colors.border),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.notifications_active_outlined,
-                          size: 16, color: AppColors.textSecondary),
+                      Icon(Icons.notifications_active_outlined,
+                          size: 16, color: context.colors.textSecondary),
                       const SizedBox(width: 8),
-                      const Text('Avisar:',
+                      Text(l.remindAt,
                           style: TextStyle(
-                              color: AppColors.textSecondary, fontSize: 14)),
+                              color: context.colors.textSecondary, fontSize: 14)),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           _antecedenciaLabel(_lembreteMinAntes),
-                          style: const TextStyle(
-                              color: AppColors.textPrimary, fontSize: 14),
+                          style: TextStyle(
+                              color: context.colors.textPrimary, fontSize: 14),
                         ),
                       ),
-                      const Icon(Icons.arrow_drop_down,
-                          color: AppColors.textSecondary),
+                      Icon(Icons.arrow_drop_down,
+                          color: context.colors.textSecondary),
                     ],
                   ),
                 ),
@@ -382,8 +387,8 @@ class _TaskCreateModalState extends State<TaskCreateModal> {
             ElevatedButton(
               onPressed: _save,
               style: ElevatedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48)),
-              child: Text(_isEditing ? 'Salvar alterações' : 'Salvar tarefa'),
+                  minimumSize: Size.fromHeight(48)),
+              child: Text(_isEditing ? l.saveChanges : l.saveTask),
             ),
           ],
         ),
@@ -398,15 +403,15 @@ class _TaskCreateModalState extends State<TaskCreateModal> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? color.withValues(alpha: 0.2) : AppColors.card,
+          color: selected ? color.withValues(alpha: 0.2) : context.colors.card,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-              color: selected ? color : AppColors.border, width: selected ? 2 : 1),
+              color: selected ? color : context.colors.border, width: selected ? 2 : 1),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: selected ? color : AppColors.textSecondary,
+            color: selected ? color : context.colors.textSecondary,
             fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
             fontSize: 13,
           ),

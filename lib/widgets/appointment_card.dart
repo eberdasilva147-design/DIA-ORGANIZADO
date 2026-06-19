@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import '../models/appointment_model.dart';
 import '../utils/app_colors.dart';
+import '../utils/dia_colors.dart';
+import '../utils/l10n_ext.dart';
 
 class AppointmentCard extends StatelessWidget {
   final AppointmentModel appointment;
   final VoidCallback? onDelete;
   final VoidCallback? onEdit;
   final VoidCallback? onReschedule;
-  final VoidCallback? onHide; // "ocultar da Home"
+  final VoidCallback? onHide;
 
   const AppointmentCard({
     super.key,
@@ -18,156 +20,201 @@ class AppointmentCard extends StatelessWidget {
     this.onHide,
   });
 
-  // 🔴 atrasado · 🔵 hoje · 🟢 confirmado · 🟡 pendente
-  static const _statusColors = {
-    'atrasado': AppColors.error,
-    'hoje': AppColors.celestial,
-    'confirmado': AppColors.success,
-    'pendente': AppColors.priorityMedium,
-  };
-  static const _statusLabels = {
-    'atrasado': 'Atrasado',
-    'hoje': 'Hoje',
-    'confirmado': 'Confirmado',
-    'pendente': 'Pendente',
-  };
-
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
+    final priorityColor = AppColors.priorityColor(appointment.prioridade);
     final status = appointment.statusKind;
-    final statusColor = _statusColors[status] ?? AppColors.accent;
+    final statusLabel = l.statusLabel(status);
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.card,
+        color: context.colors.card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: statusColor.withValues(alpha: 0.45)),
+        border: Border.all(color: context.colors.border),
       ),
-      child: Row(
-        children: [
-          // Faixa de status (cor por estado)
-          Container(
-            width: 4,
-            height: 52,
-            decoration: BoxDecoration(
-              color: statusColor,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  appointment.titulo,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                  ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: 5,
+              decoration: BoxDecoration(
+                color: priorityColor,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(12),
+                  bottomLeft: Radius.circular(12),
                 ),
-                const SizedBox(height: 4),
-                Row(
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.schedule,
-                        size: 12, color: AppColors.textSecondary),
-                    const SizedBox(width: 4),
-                    Text(appointment.horario,
-                        style: const TextStyle(
-                            color: AppColors.textSecondary, fontSize: 12)),
-                    if (appointment.local.isNotEmpty) ...[
-                      const SizedBox(width: 10),
-                      const Icon(Icons.place,
-                          size: 12, color: AppColors.textSecondary),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          appointment.local,
-                          style: const TextStyle(
-                              color: AppColors.textSecondary, fontSize: 12),
-                          overflow: TextOverflow.ellipsis,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            appointment.titulo,
+                            style: TextStyle(
+                              color: context.colors.textPrimary,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
+                        if (statusLabel.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _statusColor(status)
+                                  .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              statusLabel,
+                              style: TextStyle(
+                                color: _statusColor(status),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.schedule,
+                            size: 13, color: context.colors.textSecondary),
+                        const SizedBox(width: 4),
+                        Text(appointment.horario,
+                            style: TextStyle(
+                                color: context.colors.textSecondary, fontSize: 12)),
+                        const SizedBox(width: 10),
+                        Icon(Icons.calendar_today,
+                            size: 13, color: context.colors.textSecondary),
+                        const SizedBox(width: 4),
+                        Text(appointment.dateFormatted,
+                            style: TextStyle(
+                                color: context.colors.textSecondary, fontSize: 12)),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: priorityColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                            color: priorityColor.withValues(alpha: 0.35)),
+                      ),
+                      child: Text(
+                        l.priorityBadge(l.priorityLabel(appointment.prioridade)),
+                        style: TextStyle(
+                          color: priorityColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    if (onEdit != null ||
+                        onReschedule != null ||
+                        onHide != null ||
+                        onDelete != null) ...[
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          if (onEdit != null)
+                            _actionBtn(
+                              l.actionEdit,
+                              Icons.edit_outlined,
+                              AppColors.celestial,
+                              onEdit!,
+                            ),
+                          if (onReschedule != null)
+                            _actionBtn(
+                              l.actionReschedule,
+                              Icons.event_repeat_outlined,
+                              AppColors.gold,
+                              onReschedule!,
+                            ),
+                          if (onHide != null)
+                            _actionBtn(
+                              l.actionHide,
+                              Icons.visibility_off_outlined,
+                              const Color(0xFF7B5EA7),
+                              onHide!,
+                            ),
+                          if (onDelete != null)
+                            _actionBtn(
+                              l.actionDelete,
+                              Icons.delete_outline,
+                              AppColors.error,
+                              onDelete!,
+                            ),
+                        ],
                       ),
                     ],
                   ],
                 ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Text(
-                      appointment.dateFormatted,
-                      style: const TextStyle(
-                          color: AppColors.accent, fontSize: 11),
-                    ),
-                    const SizedBox(width: 8),
-                    // Etiqueta de status
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        _statusLabels[status] ?? '',
-                        style: TextStyle(
-                            color: statusColor,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+              ),
             ),
-          ),
-          // Menu de ações
-          if (onEdit != null ||
-              onReschedule != null ||
-              onDelete != null ||
-              onHide != null)
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert,
-                  color: AppColors.textSecondary, size: 20),
-              color: AppColors.card,
-              onSelected: (v) {
-                if (v == 'editar') onEdit?.call();
-                if (v == 'reagendar') onReschedule?.call();
-                if (v == 'ocultar') onHide?.call();
-                if (v == 'excluir') onDelete?.call();
-              },
-              itemBuilder: (_) => [
-                if (onEdit != null)
-                  const PopupMenuItem(
-                    value: 'editar',
-                    child: Text('Editar',
-                        style: TextStyle(color: AppColors.textPrimary)),
-                  ),
-                if (onReschedule != null)
-                  const PopupMenuItem(
-                    value: 'reagendar',
-                    child: Text('Reagendar',
-                        style: TextStyle(color: AppColors.textPrimary)),
-                  ),
-                if (onHide != null)
-                  const PopupMenuItem(
-                    value: 'ocultar',
-                    child: Text('Ocultar da Home',
-                        style: TextStyle(color: AppColors.textPrimary)),
-                  ),
-                if (onDelete != null)
-                  const PopupMenuItem(
-                    value: 'excluir',
-                    child: Text('Excluir',
-                        style: TextStyle(color: AppColors.error)),
-                  ),
-              ],
-            ),
-        ],
+          ],
+        ),
       ),
     );
+  }
+
+  Widget _actionBtn(
+      String label, IconData icon, Color color, VoidCallback onPressed) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          border: Border.all(color: color.withValues(alpha: 0.5)),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13, color: color),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                  color: color,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'atrasado':
+        return AppColors.error;
+      case 'hoje':
+        return AppColors.celestial;
+      case 'confirmado':
+        return AppColors.success;
+      default:
+        return AppColors.priorityMedium;
+    }
   }
 }

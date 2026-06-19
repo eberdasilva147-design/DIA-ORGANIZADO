@@ -8,6 +8,8 @@ class AppointmentModel {
   final int ano;
   final bool ocultarDaHome;
   final bool confirmado;
+  final String prioridade; // 'h', 'm', 'l'
+  final DateTime? deletedAt;
 
   AppointmentModel({
     required this.id,
@@ -19,6 +21,8 @@ class AppointmentModel {
     required this.ano,
     this.ocultarDaHome = false,
     this.confirmado = false,
+    this.prioridade = 'm',
+    this.deletedAt,
   });
 
   Map<String, dynamic> toMap() => {
@@ -30,6 +34,8 @@ class AppointmentModel {
         'ano': ano,
         'ocultar_da_home': ocultarDaHome,
         'confirmado': confirmado,
+        'prioridade': prioridade,
+        'deleted_at': deletedAt?.toUtc().toIso8601String(),
       };
 
   factory AppointmentModel.fromMap(String id, Map<String, dynamic> map) =>
@@ -43,6 +49,10 @@ class AppointmentModel {
         ano: map['ano'] ?? DateTime.now().year,
         ocultarDaHome: map['ocultar_da_home'] ?? false,
         confirmado: map['confirmado'] ?? false,
+        prioridade: map['prioridade'] ?? 'm',
+        deletedAt: map['deleted_at'] != null
+            ? DateTime.tryParse(map['deleted_at'] as String)
+            : null,
       );
 
   AppointmentModel copyWith({
@@ -55,6 +65,9 @@ class AppointmentModel {
     int? ano,
     bool? ocultarDaHome,
     bool? confirmado,
+    String? prioridade,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
   }) =>
       AppointmentModel(
         id: id ?? this.id,
@@ -66,6 +79,8 @@ class AppointmentModel {
         ano: ano ?? this.ano,
         ocultarDaHome: ocultarDaHome ?? this.ocultarDaHome,
         confirmado: confirmado ?? this.confirmado,
+        prioridade: prioridade ?? this.prioridade,
+        deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
       );
 
   DateTime get date => DateTime(ano, mes, dia);
@@ -75,8 +90,14 @@ class AppointmentModel {
 
   bool isOnDate(DateTime d) => d.day == dia && d.month == mes && d.year == ano;
 
-  /// Status para o indicador visual da agenda.
-  /// 🔴 atrasado · 🔵 hoje · 🟢 confirmado (futuro) · 🟡 pendente (futuro)
+  bool get isInTrash => deletedAt != null;
+
+  int get daysUntilPurge {
+    if (deletedAt == null) return 30;
+    final purgeDate = deletedAt!.add(const Duration(days: 30));
+    return purgeDate.difference(DateTime.now()).inDays.clamp(0, 30);
+  }
+
   String get statusKind {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);

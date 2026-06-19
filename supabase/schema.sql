@@ -43,6 +43,7 @@ create table if not exists public.compromissos (
   ano integer not null,
   ocultar_da_home boolean default false,
   confirmado boolean default false,
+  prioridade text not null default 'm',
   created_at timestamptz not null default now()
 );
 

@@ -2,19 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/verse_provider.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/dia_colors.dart';
+import '../../utils/l10n_ext.dart';
 
 class VerseScreen extends StatelessWidget {
   const VerseScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     final provider = context.watch<VerseProvider>();
     final daily = provider.dailyVerse;
     final favorites = provider.favorites;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Versículo do Dia')),
+      backgroundColor: context.colors.background,
+      appBar: AppBar(title: Text(context.l10n.verseScreenTitle)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -25,7 +28,7 @@ class VerseScreen extends StatelessWidget {
               gradient: LinearGradient(
                 colors: [
                   AppColors.primary.withValues(alpha: 0.3),
-                  AppColors.card,
+                  context.colors.card,
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -41,9 +44,9 @@ class VerseScreen extends StatelessWidget {
                     const Icon(Icons.auto_awesome,
                         color: AppColors.accent, size: 20),
                     const SizedBox(width: 8),
-                    const Text(
-                      'Versículo de hoje',
-                      style: TextStyle(
+                    Text(
+                      l.verseTodayLabel,
+                      style: const TextStyle(
                           color: AppColors.accent,
                           fontSize: 13,
                           fontWeight: FontWeight.w600),
@@ -54,8 +57,8 @@ class VerseScreen extends StatelessWidget {
                         onPressed: () => provider.addFavorite(daily),
                         icon: const Icon(Icons.bookmark_border,
                             size: 18, color: AppColors.accent),
-                        label: const Text('Salvar',
-                            style: TextStyle(
+                        label: Text(l.verseSaveButton,
+                            style: const TextStyle(
                                 color: AppColors.accent, fontSize: 13)),
                         style: TextButton.styleFrom(
                             padding: EdgeInsets.zero,
@@ -63,13 +66,13 @@ class VerseScreen extends StatelessWidget {
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                       )
                     else
-                      const Row(
+                      Row(
                         children: [
-                          Icon(Icons.bookmark,
+                          const Icon(Icons.bookmark,
                               size: 18, color: AppColors.accent),
-                          SizedBox(width: 4),
-                          Text('Salvo',
-                              style: TextStyle(
+                          const SizedBox(width: 4),
+                          Text(l.verseSavedLabel,
+                              style: const TextStyle(
                                   color: AppColors.accent, fontSize: 13)),
                         ],
                       ),
@@ -78,8 +81,8 @@ class VerseScreen extends StatelessWidget {
                 const SizedBox(height: 16),
                 Text(
                   '"${daily.versiculo}"',
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
+                  style: TextStyle(
+                    color: context.colors.textPrimary,
                     fontSize: 18,
                     fontStyle: FontStyle.italic,
                     height: 1.6,
@@ -99,10 +102,10 @@ class VerseScreen extends StatelessWidget {
 
           if (favorites.isNotEmpty) ...[
             const SizedBox(height: 24),
-            const Text(
-              'Favoritos',
+            Text(
+              l.verseFavoritesTitle,
               style: TextStyle(
-                  color: AppColors.textPrimary,
+                  color: context.colors.textPrimary,
                   fontSize: 17,
                   fontWeight: FontWeight.w700),
             ),
@@ -111,17 +114,17 @@ class VerseScreen extends StatelessWidget {
                   margin: const EdgeInsets.only(bottom: 10),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: AppColors.card,
+                    color: context.colors.card,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.border),
+                    border: Border.all(color: context.colors.border),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         '"${v.versiculo}"',
-                        style: const TextStyle(
-                            color: AppColors.textPrimary,
+                        style: TextStyle(
+                            color: context.colors.textPrimary,
                             fontSize: 14,
                             fontStyle: FontStyle.italic,
                             height: 1.5),

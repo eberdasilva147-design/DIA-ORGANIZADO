@@ -14,19 +14,25 @@ abstract class DataService {
   Stream<List<TaskModel>> streamTasks();
   Future<void> addTask(TaskModel task);
   Future<void> updateTask(TaskModel task);
-  Future<void> deleteTask(String id);
+  Future<void> softDeleteTask(String id);
+  Future<void> restoreTask(String id);
+  Future<void> deleteTask(String id); // exclusão definitiva
 
   // Compromissos
   Stream<List<AppointmentModel>> streamAppointments();
   Future<void> addAppointment(AppointmentModel appointment);
   Future<void> updateAppointment(AppointmentModel appointment);
-  Future<void> deleteAppointment(String id);
+  Future<void> softDeleteAppointment(String id);
+  Future<void> restoreAppointment(String id);
+  Future<void> deleteAppointment(String id); // exclusão definitiva
 
   // Notas
   Stream<List<NoteModel>> streamNotes();
   Future<void> addNote(NoteModel note);
   Future<void> updateNote(NoteModel note);
-  Future<void> deleteNote(String id);
+  Future<void> softDeleteNote(String id);
+  Future<void> restoreNote(String id);
+  Future<void> deleteNote(String id); // exclusão definitiva
 
   // Versículos favoritos
   Stream<List<VerseModel>> streamFavoriteVerses();

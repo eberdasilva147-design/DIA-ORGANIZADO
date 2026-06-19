@@ -8,8 +8,9 @@ class TaskModel {
   final bool atrasada;
   final bool lembrete;
   final String observacao;
-  final int lembreteMinAntes; // minutos antes do horário para o lembrete
+  final int lembreteMinAntes;
   final bool ocultarDaHome;
+  final DateTime? deletedAt;
 
   TaskModel({
     required this.id,
@@ -23,6 +24,7 @@ class TaskModel {
     this.observacao = '',
     this.lembreteMinAntes = 0,
     this.ocultarDaHome = false,
+    this.deletedAt,
   });
 
   Map<String, dynamic> toMap() => {
@@ -36,6 +38,7 @@ class TaskModel {
         'observacao': observacao,
         'lembrete_min_antes': lembreteMinAntes,
         'ocultar_da_home': ocultarDaHome,
+        'deleted_at': deletedAt?.toUtc().toIso8601String(),
       };
 
   factory TaskModel.fromMap(String id, Map<String, dynamic> map) => TaskModel(
@@ -50,6 +53,9 @@ class TaskModel {
         observacao: map['observacao'] ?? '',
         lembreteMinAntes: (map['lembrete_min_antes'] as num?)?.toInt() ?? 0,
         ocultarDaHome: map['ocultar_da_home'] ?? false,
+        deletedAt: map['deleted_at'] != null
+            ? DateTime.tryParse(map['deleted_at'] as String)
+            : null,
       );
 
   TaskModel copyWith({
@@ -64,6 +70,8 @@ class TaskModel {
     String? observacao,
     int? lembreteMinAntes,
     bool? ocultarDaHome,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
   }) =>
       TaskModel(
         id: id ?? this.id,
@@ -77,6 +85,7 @@ class TaskModel {
         observacao: observacao ?? this.observacao,
         lembreteMinAntes: lembreteMinAntes ?? this.lembreteMinAntes,
         ocultarDaHome: ocultarDaHome ?? this.ocultarDaHome,
+        deletedAt: clearDeletedAt ? null : (deletedAt ?? this.deletedAt),
       );
 
   DateTime? get dateTime {
@@ -96,7 +105,6 @@ class TaskModel {
     }
   }
 
-  /// Momento em que o lembrete deve disparar (horário − antecedência).
   DateTime? get lembreteDateTime {
     final dt = dateTime;
     if (dt == null) return null;
@@ -107,5 +115,14 @@ class TaskModel {
     final dt = dateTime;
     if (dt == null || concluida) return false;
     return dt.isBefore(DateTime.now());
+  }
+
+  bool get isInTrash => deletedAt != null;
+
+  /// Dias restantes antes da exclusão definitiva (30 dias após ir para lixeira).
+  int get daysUntilPurge {
+    if (deletedAt == null) return 30;
+    final purgeDate = deletedAt!.add(const Duration(days: 30));
+    return purgeDate.difference(DateTime.now()).inDays.clamp(0, 30);
   }
 }

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'l10n/app_localizations.dart';
 
 import 'supabase_config.dart';
 import 'providers/auth_provider.dart';
@@ -44,7 +46,11 @@ void main() async {
   }
 
   await NotificationService().init();
-  await initializeDateFormatting('pt_BR', null);
+  await Future.wait([
+    initializeDateFormatting('pt_BR', null),
+    initializeDateFormatting('en_US', null),
+    initializeDateFormatting('es', null),
+  ]);
 
   runApp(DiaOrganizadoApp(localMode: !cloudReady));
 }
@@ -70,6 +76,14 @@ class DiaOrganizadoApp extends StatelessWidget {
           title: 'Dia Organizado',
           debugShowCheckedModeBanner: false,
           theme: settings.darkMode ? AppTheme.darkTheme : AppTheme.lightTheme,
+          locale: settings.locale,
+          supportedLocales: AppLocalizations.supportedLocales,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
           home: const SplashScreen(),
         ),
       ),

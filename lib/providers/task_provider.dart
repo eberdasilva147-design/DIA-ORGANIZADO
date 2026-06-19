@@ -8,18 +8,22 @@ class TaskProvider extends ChangeNotifier {
   List<TaskModel> _tasks = [];
   bool _loading = false;
 
-  List<TaskModel> get tasks => _tasks;
+  List<TaskModel> get tasks => _tasks.where((t) => !t.isInTrash).toList();
   bool get loading => _loading;
 
   List<TaskModel> get pending =>
-      _tasks.where((t) => !t.concluida).toList()
+      tasks.where((t) => !t.concluida).toList()
         ..sort((a, b) {
           const order = {'h': 0, 'm': 1, 'l': 2};
           return (order[a.prioridade] ?? 1).compareTo(order[b.prioridade] ?? 1);
         });
 
   List<TaskModel> get completed =>
-      _tasks.where((t) => t.concluida).toList();
+      tasks.where((t) => t.concluida).toList();
+
+  List<TaskModel> get trashed =>
+      _tasks.where((t) => t.isInTrash).toList()
+        ..sort((a, b) => b.deletedAt!.compareTo(a.deletedAt!));
 
   List<TaskModel> get todayTasks {
     final now = DateTime.now();
@@ -44,7 +48,7 @@ class TaskProvider extends ChangeNotifier {
     _loading = true;
     notifyListeners();
     DataService.instance.streamTasks().listen((list) {
-      _tasks = list.map((t) => t.copyWith(atrasada: t.isOverdue)).toList();
+      _tasks = list.map((t) => t.isInTrash ? t : t.copyWith(atrasada: t.isOverdue)).toList();
       _loading = false;
       notifyListeners();
     });
@@ -87,6 +91,18 @@ class TaskProvider extends ChangeNotifier {
     await _scheduleReminder(updated);
   }
 
+  /// Move para a lixeira (soft delete).
+  Future<void> softDeleteTask(String id) async {
+    await DataService.instance.softDeleteTask(id);
+    await NotificationService().cancelNotification(_notificationId(id));
+  }
+
+  /// Restaura da lixeira.
+  Future<void> restoreTask(String id) async {
+    await DataService.instance.restoreTask(id);
+  }
+
+  /// Exclui definitivamente (apenas itens já na lixeira).
   Future<void> deleteTask(String id) async {
     await DataService.instance.deleteTask(id);
     await NotificationService().cancelNotification(_notificationId(id));
@@ -97,20 +113,17 @@ class TaskProvider extends ChangeNotifier {
     await _scheduleReminder(task);
   }
 
-  /// Mostra/oculta a tarefa da Home (continua na lista de Tarefas).
   Future<void> toggleOcultarDaHome(String id) async {
     final t = _tasks.firstWhere((x) => x.id == id);
     await DataService.instance
         .updateTask(t.copyWith(ocultarDaHome: !t.ocultarDaHome));
   }
 
-  // O plugin de notificações exige id int; deriva um estável do id da tarefa.
   int _notificationId(String taskId) => taskId.hashCode & 0x7fffffff;
 
   Future<void> _scheduleReminder(TaskModel task) async {
     final notifId = _notificationId(task.id);
     await NotificationService().cancelNotification(notifId);
-    // Dispara na antecedência escolhida (horário − lembreteMinAntes)
     final dt = task.lembreteDateTime;
     if (!task.lembrete || task.concluida || dt == null || !dt.isAfter(DateTime.now())) {
       return;

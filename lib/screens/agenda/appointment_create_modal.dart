@@ -4,11 +4,11 @@ import 'package:provider/provider.dart';
 import '../../models/appointment_model.dart';
 import '../../providers/appointment_provider.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/dia_colors.dart';
+import '../../utils/l10n_ext.dart';
 
 class AppointmentCreateModal extends StatefulWidget {
   final DateTime initialDate;
-
-  /// Se informado, abre em modo edição.
   final AppointmentModel? appointment;
 
   const AppointmentCreateModal(
@@ -38,6 +38,7 @@ class _State extends State<AppointmentCreateModal> {
   late DateTime _selectedDate;
   TimeOfDay _selectedTime = const TimeOfDay(hour: 9, minute: 0);
   bool _confirmado = false;
+  String _priority = 'm';
 
   bool get _isEditing => widget.appointment != null;
 
@@ -51,6 +52,7 @@ class _State extends State<AppointmentCreateModal> {
       _localCtrl.text = ap.local;
       _selectedDate = ap.date;
       _confirmado = ap.confirmado;
+      _priority = ap.prioridade;
       final hm = ap.horario.split(':');
       if (hm.length == 2) {
         _selectedTime = TimeOfDay(
@@ -108,6 +110,7 @@ class _State extends State<AppointmentCreateModal> {
         mes: _selectedDate.month,
         ano: _selectedDate.year,
         confirmado: _confirmado,
+        prioridade: _priority,
       ));
     } else {
       await provider.addAppointment(
@@ -115,18 +118,45 @@ class _State extends State<AppointmentCreateModal> {
         horario: horario,
         local: _localCtrl.text.trim(),
         date: _selectedDate,
+        prioridade: _priority,
       );
     }
     if (mounted) Navigator.pop(context);
   }
 
+  Widget _priorityChip(String value, String label, Color color) {
+    final selected = _priority == value;
+    return GestureDetector(
+      onTap: () => setState(() => _priority = value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? color.withValues(alpha: 0.2) : context.colors.card,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+              color: selected ? color : context.colors.border,
+              width: selected ? 2 : 1),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? color : context.colors.textSecondary,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
+            fontSize: 13,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
-        decoration: const BoxDecoration(
-          color: AppColors.backgroundSecondary,
+        decoration: BoxDecoration(
+          color: context.colors.backgroundSecondary,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
@@ -139,33 +169,33 @@ class _State extends State<AppointmentCreateModal> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                    color: AppColors.border,
+                    color: context.colors.border,
                     borderRadius: BorderRadius.circular(2)),
               ),
             ),
             const SizedBox(height: 16),
-            Text(_isEditing ? 'Editar Compromisso' : 'Novo Compromisso',
-                style: const TextStyle(
-                    color: AppColors.textPrimary,
+            Text(_isEditing ? l.editAppointment : l.newAppointment,
+                style: TextStyle(
+                    color: context.colors.textPrimary,
                     fontSize: 18,
                     fontWeight: FontWeight.w700)),
             const SizedBox(height: 16),
             TextField(
               controller: _titleCtrl,
               autofocus: true,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: const InputDecoration(
-                hintText: 'Título do compromisso',
-                prefixIcon: Icon(Icons.event, color: AppColors.textSecondary),
+              style: TextStyle(color: context.colors.textPrimary),
+              decoration: InputDecoration(
+                hintText: l.appointmentTitleHint,
+                prefixIcon: Icon(Icons.event, color: context.colors.textSecondary),
               ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _localCtrl,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: const InputDecoration(
-                hintText: 'Local (opcional)',
-                prefixIcon: Icon(Icons.place, color: AppColors.textSecondary),
+              style: TextStyle(color: context.colors.textPrimary),
+              decoration: InputDecoration(
+                hintText: l.locationHint,
+                prefixIcon: Icon(Icons.place, color: context.colors.textSecondary),
               ),
             ),
             const SizedBox(height: 12),
@@ -178,19 +208,19 @@ class _State extends State<AppointmentCreateModal> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 14),
                       decoration: BoxDecoration(
-                        color: AppColors.card,
+                        color: context.colors.card,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.border),
+                        border: Border.all(color: context.colors.border),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.calendar_today,
-                              size: 16, color: AppColors.textSecondary),
+                          Icon(Icons.calendar_today,
+                              size: 16, color: context.colors.textSecondary),
                           const SizedBox(width: 8),
                           Text(
                             DateFormat('dd/MM/yyyy').format(_selectedDate),
-                            style: const TextStyle(
-                                color: AppColors.textPrimary, fontSize: 14),
+                            style: TextStyle(
+                                color: context.colors.textPrimary, fontSize: 14),
                           ),
                         ],
                       ),
@@ -205,19 +235,19 @@ class _State extends State<AppointmentCreateModal> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 14),
                       decoration: BoxDecoration(
-                        color: AppColors.card,
+                        color: context.colors.card,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.border),
+                        border: Border.all(color: context.colors.border),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.schedule,
-                              size: 16, color: AppColors.textSecondary),
+                          Icon(Icons.schedule,
+                              size: 16, color: context.colors.textSecondary),
                           const SizedBox(width: 8),
                           Text(
                             '${_selectedTime.hour.toString().padLeft(2, '0')}:${_selectedTime.minute.toString().padLeft(2, '0')}',
-                            style: const TextStyle(
-                                color: AppColors.textPrimary, fontSize: 14),
+                            style: TextStyle(
+                                color: context.colors.textPrimary, fontSize: 14),
                           ),
                         ],
                       ),
@@ -226,14 +256,28 @@ class _State extends State<AppointmentCreateModal> {
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            Text(l.priority,
+                style: TextStyle(
+                    color: context.colors.textSecondary, fontSize: 13)),
             const SizedBox(height: 8),
             Row(
               children: [
-                const Icon(Icons.verified_outlined,
-                    size: 18, color: AppColors.textSecondary),
+                _priorityChip('h', l.priorityHigh, AppColors.priorityHigh),
                 const SizedBox(width: 8),
-                const Text('Confirmado',
-                    style: TextStyle(color: AppColors.textPrimary)),
+                _priorityChip('m', l.priorityMedium, AppColors.priorityMedium),
+                const SizedBox(width: 8),
+                _priorityChip('l', l.priorityLow, AppColors.priorityLow),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.verified_outlined,
+                    size: 18, color: context.colors.textSecondary),
+                const SizedBox(width: 8),
+                Text(l.confirmed,
+                    style: TextStyle(color: context.colors.textPrimary)),
                 const Spacer(),
                 Switch(
                   value: _confirmado,
@@ -246,8 +290,7 @@ class _State extends State<AppointmentCreateModal> {
               onPressed: _save,
               style: ElevatedButton.styleFrom(
                   minimumSize: const Size.fromHeight(48)),
-              child: Text(
-                  _isEditing ? 'Salvar alterações' : 'Salvar compromisso'),
+              child: Text(_isEditing ? l.saveChanges : l.saveAppointment),
             ),
           ],
         ),

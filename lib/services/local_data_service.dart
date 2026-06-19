@@ -112,6 +112,20 @@ class LocalDataService implements DataService {
   }
 
   @override
+  Future<void> softDeleteTask(String id) async {
+    final i = _tasks.indexWhere((t) => t.id == id);
+    if (i >= 0) _tasks[i] = _tasks[i].copyWith(deletedAt: DateTime.now());
+    await _saveTasks();
+  }
+
+  @override
+  Future<void> restoreTask(String id) async {
+    final i = _tasks.indexWhere((t) => t.id == id);
+    if (i >= 0) _tasks[i] = _tasks[i].copyWith(clearDeletedAt: true);
+    await _saveTasks();
+  }
+
+  @override
   Future<void> deleteTask(String id) async {
     _tasks.removeWhere((t) => t.id == id);
     await _saveTasks();
@@ -135,6 +149,20 @@ class LocalDataService implements DataService {
   Future<void> updateAppointment(AppointmentModel appointment) async {
     final i = _appointments.indexWhere((a) => a.id == appointment.id);
     if (i >= 0) _appointments[i] = appointment;
+    await _saveAppointments();
+  }
+
+  @override
+  Future<void> softDeleteAppointment(String id) async {
+    final i = _appointments.indexWhere((a) => a.id == id);
+    if (i >= 0) _appointments[i] = _appointments[i].copyWith(deletedAt: DateTime.now());
+    await _saveAppointments();
+  }
+
+  @override
+  Future<void> restoreAppointment(String id) async {
+    final i = _appointments.indexWhere((a) => a.id == id);
+    if (i >= 0) _appointments[i] = _appointments[i].copyWith(clearDeletedAt: true);
     await _saveAppointments();
   }
 
@@ -168,6 +196,20 @@ class LocalDataService implements DataService {
   Future<void> updateNote(NoteModel note) async {
     final i = _notes.indexWhere((n) => n.id == note.id);
     if (i >= 0) _notes[i] = note;
+    await _saveNotes();
+  }
+
+  @override
+  Future<void> softDeleteNote(String id) async {
+    final i = _notes.indexWhere((n) => n.id == id);
+    if (i >= 0) _notes[i] = _notes[i].copyWith(deletedAt: DateTime.now());
+    await _saveNotes();
+  }
+
+  @override
+  Future<void> restoreNote(String id) async {
+    final i = _notes.indexWhere((n) => n.id == id);
+    if (i >= 0) _notes[i] = _notes[i].copyWith(clearDeletedAt: true);
     await _saveNotes();
   }
 

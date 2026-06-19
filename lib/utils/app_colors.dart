@@ -25,9 +25,9 @@ class AppColors {
   static const Color textSecondary = Color(0xFF7F7663);
 
   // Prioridades (terracota / dourado / azul celeste)
-  static const Color priorityHigh = Color(0xFF9F402D);
-  static const Color priorityMedium = Color(0xFFB8860B);
-  static const Color priorityLow = Color(0xFF0C6780);
+  static const Color priorityHigh = Color(0xFFD32F2F);
+  static const Color priorityMedium = Color(0xFFF9A825);
+  static const Color priorityLow = Color(0xFF388E3C);
 
   // Estados
   static const Color white = Color(0xFFFFFFFF);

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/dia_colors.dart';
+import '../../utils/l10n_ext.dart';
 import '../main_scaffold.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -34,7 +36,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (!mounted) return;
     if (ok) {
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const MainScaffold()),
+        MaterialPageRoute(builder: (_) => MainScaffold()),
         (_) => false,
       );
     }
@@ -42,12 +44,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     final auth = context.watch<AuthProvider>();
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       appBar: AppBar(
-        title: const Text('Criar conta'),
-        leading: const BackButton(color: AppColors.accent),
+        title: Text(l.registerTitle),
+        leading: BackButton(color: AppColors.accent),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -61,47 +64,47 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 TextFormField(
                   controller: _nameCtrl,
                   textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'Seu nome',
+                  decoration: InputDecoration(
+                    labelText: l.nameLabel,
                     prefixIcon: Icon(Icons.person_outline,
-                        color: AppColors.textSecondary),
+                        color: context.colors.textSecondary),
                   ),
-                  style: const TextStyle(color: AppColors.textPrimary),
+                  style: TextStyle(color: context.colors.textPrimary),
                   validator: (v) =>
-                      v == null || v.isEmpty ? 'Informe seu nome' : null,
+                      v == null || v.isEmpty ? l.nameRequired : null,
                 ),
                 const SizedBox(height: 14),
                 TextFormField(
                   controller: _emailCtrl,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                    labelText: 'E-mail',
+                  decoration: InputDecoration(
+                    labelText: l.emailLabel,
                     prefixIcon: Icon(Icons.email_outlined,
-                        color: AppColors.textSecondary),
+                        color: context.colors.textSecondary),
                   ),
-                  style: const TextStyle(color: AppColors.textPrimary),
+                  style: TextStyle(color: context.colors.textPrimary),
                   validator: (v) =>
-                      v == null || !v.contains('@') ? 'E-mail inválido' : null,
+                      v == null || !v.contains('@') ? l.invalidEmail : null,
                 ),
                 const SizedBox(height: 14),
                 TextFormField(
                   controller: _passCtrl,
                   obscureText: _obscure,
                   decoration: InputDecoration(
-                    labelText: 'Senha',
-                    prefixIcon: const Icon(Icons.lock_outline,
-                        color: AppColors.textSecondary),
+                    labelText: l.passwordLabel,
+                    prefixIcon: Icon(Icons.lock_outline,
+                        color: context.colors.textSecondary),
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscure ? Icons.visibility_off : Icons.visibility,
-                        color: AppColors.textSecondary,
+                        color: context.colors.textSecondary,
                       ),
                       onPressed: () => setState(() => _obscure = !_obscure),
                     ),
                   ),
-                  style: const TextStyle(color: AppColors.textPrimary),
+                  style: TextStyle(color: context.colors.textPrimary),
                   validator: (v) =>
-                      v == null || v.length < 6 ? 'Mínimo 6 caracteres' : null,
+                      v == null || v.length < 6 ? l.minChars : null,
                 ),
                 if (auth.error != null) ...[
                   const SizedBox(height: 12),
@@ -127,8 +130,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         onPressed: _submit,
                         style: ElevatedButton.styleFrom(
                             minimumSize: const Size.fromHeight(52)),
-                        child: const Text('Criar conta',
-                            style: TextStyle(fontSize: 17)),
+                        child: Text(l.registerButton,
+                            style: const TextStyle(fontSize: 17)),
                       ),
               ],
             ),

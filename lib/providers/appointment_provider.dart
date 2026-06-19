@@ -6,15 +6,20 @@ import '../services/data_service.dart';
 class AppointmentProvider extends ChangeNotifier {
   List<AppointmentModel> _appointments = [];
 
-  List<AppointmentModel> get appointments => _appointments;
+  List<AppointmentModel> get appointments =>
+      _appointments.where((a) => !a.isInTrash).toList();
+
+  List<AppointmentModel> get trashed =>
+      _appointments.where((a) => a.isInTrash).toList()
+        ..sort((a, b) => b.deletedAt!.compareTo(a.deletedAt!));
 
   List<AppointmentModel> forDate(DateTime date) =>
-      _appointments.where((a) => a.isOnDate(date)).toList()
+      appointments.where((a) => a.isOnDate(date)).toList()
         ..sort((a, b) => a.horario.compareTo(b.horario));
 
   List<AppointmentModel> get upcoming {
     final now = DateTime.now();
-    return _appointments
+    return appointments
         .where((a) => a.date.isAfter(now.subtract(const Duration(days: 1))))
         .toList()
       ..sort((a, b) => a.date.compareTo(b.date));
@@ -32,6 +37,7 @@ class AppointmentProvider extends ChangeNotifier {
     required String horario,
     String local = '',
     required DateTime date,
+    String prioridade = 'm',
   }) async {
     final ap = AppointmentModel(
       id: const Uuid().v4(),
@@ -41,6 +47,7 @@ class AppointmentProvider extends ChangeNotifier {
       dia: date.day,
       mes: date.month,
       ano: date.year,
+      prioridade: prioridade,
     );
     await DataService.instance.addAppointment(ap);
   }
@@ -49,7 +56,6 @@ class AppointmentProvider extends ChangeNotifier {
     await DataService.instance.updateAppointment(ap);
   }
 
-  /// Reagenda um compromisso para nova data/horário.
   Future<void> reschedule(String id, DateTime date, String horario) async {
     final ap = _appointments.firstWhere((a) => a.id == id);
     await updateAppointment(ap.copyWith(
@@ -60,18 +66,27 @@ class AppointmentProvider extends ChangeNotifier {
     ));
   }
 
-  /// Mostra/oculta o compromisso da Home (continua na Agenda).
   Future<void> toggleOcultarDaHome(String id) async {
     final ap = _appointments.firstWhere((a) => a.id == id);
     await updateAppointment(ap.copyWith(ocultarDaHome: !ap.ocultarDaHome));
   }
 
-  /// Alterna confirmado/pendente (indicador 🟢/🟡).
   Future<void> toggleConfirmado(String id) async {
     final ap = _appointments.firstWhere((a) => a.id == id);
     await updateAppointment(ap.copyWith(confirmado: !ap.confirmado));
   }
 
+  /// Move para a lixeira (soft delete).
+  Future<void> softDeleteAppointment(String id) async {
+    await DataService.instance.softDeleteAppointment(id);
+  }
+
+  /// Restaura da lixeira.
+  Future<void> restoreAppointment(String id) async {
+    await DataService.instance.restoreAppointment(id);
+  }
+
+  /// Exclui definitivamente (apenas itens já na lixeira).
   Future<void> deleteAppointment(String id) async {
     await DataService.instance.deleteAppointment(id);
   }

@@ -8,31 +8,35 @@ import '../../providers/appointment_provider.dart';
 import '../../providers/verse_provider.dart';
 import '../../models/appointment_model.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/dia_colors.dart';
+import '../../utils/l10n_ext.dart';
 import '../../widgets/task_card.dart';
 import '../../widgets/appointment_card.dart';
 import '../settings/settings_screen.dart';
 import '../tasks/task_create_modal.dart';
-import '../tasks/tasks_screen.dart' show rescheduleTaskFlow;
+import '../tasks/tasks_screen.dart' show rescheduleTaskFlow, confirmDeleteTask;
 import '../agenda/agenda_screen.dart'
     show rescheduleAppointmentFlow, confirmDeleteAppointment;
 import '../agenda/appointment_create_modal.dart';
 
 class HomeScreen extends StatelessWidget {
-  const HomeScreen({super.key});
+  HomeScreen({super.key});
 
-  String _greeting() {
+  String _greeting(BuildContext context) {
+    final l = context.l10n;
     final hour = DateTime.now().hour;
-    if (hour < 12) return 'Bom dia';
-    if (hour < 18) return 'Boa tarde';
-    return 'Boa noite';
+    if (hour < 12) return l.greetingMorning;
+    if (hour < 18) return l.greetingAfternoon;
+    return l.greetingEvening;
   }
 
-  String _formattedDate() {
-    return DateFormat("EEEE, d 'de' MMMM 'de' yyyy", 'pt_BR')
+  String _formattedDate(BuildContext context) {
+    final locale = Localizations.localeOf(context).toLanguageTag();
+    return DateFormat("EEEE, d 'de' MMMM 'de' yyyy", locale)
         .format(DateTime.now());
   }
 
-  Widget _sectionTitle(IconData icon, String title, String? count) => Row(
+  Widget _sectionTitle(BuildContext context, IconData icon, String title, String? count) => Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Flexible(
@@ -43,7 +47,7 @@ class HomeScreen extends StatelessWidget {
                 Flexible(
                   child: Text(title,
                       style: GoogleFonts.notoSerif(
-                          color: AppColors.textPrimary,
+                          color: context.colors.textPrimary,
                           fontSize: 19,
                           fontWeight: FontWeight.w700)),
                 ),
@@ -53,22 +57,22 @@ class HomeScreen extends StatelessWidget {
           if (count != null)
             Text(count,
                 style: GoogleFonts.spaceGrotesk(
-                    color: AppColors.textSecondary,
+                    color: context.colors.textSecondary,
                     fontSize: 12,
                     fontWeight: FontWeight.w600)),
         ],
       );
 
-  Widget _emptyCard(String text) => Container(
+  Widget _emptyCard(BuildContext context, String text) => Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: AppColors.card,
+          color: context.colors.card,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.border),
+          border: Border.all(color: context.colors.border),
         ),
         child: Center(
             child: Text(text,
-                style: const TextStyle(color: AppColors.textSecondary))),
+                style: TextStyle(color: context.colors.textSecondary))),
       );
 
   Widget _apptCard(BuildContext context, AppointmentModel ap) =>
@@ -107,7 +111,7 @@ class HomeScreen extends StatelessWidget {
             children: [
               const Icon(Icons.add_rounded, color: Colors.white, size: 20),
               const SizedBox(width: 8),
-              Text('Nova Tarefa',
+              Text(context.l10n.newTask,
                   style: GoogleFonts.plusJakartaSans(
                       color: Colors.white,
                       fontSize: 15,
@@ -119,6 +123,7 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     final auth = context.watch<AuthProvider>();
     final tasks = context.watch<TaskProvider>();
     final appointments = context.watch<AppointmentProvider>();
@@ -127,47 +132,61 @@ class HomeScreen extends StatelessWidget {
 
     final now = DateTime.now();
     final startToday = DateTime(now.year, now.month, now.day);
-    final end5 = startToday.add(const Duration(days: 6)); // hoje + 5 dias
+    final startTomorrow = startToday.add(const Duration(days: 1));
+    final end5 = startToday.add(const Duration(days: 6));
+
     final todayAppts =
         appointments.forDate(now).where((a) => !a.ocultarDaHome).toList();
+    final todayTasks = tasks.pending.where((t) {
+      if (t.ocultarDaHome) return false;
+      final dt = t.dateTime;
+      return dt != null &&
+          dt.year == now.year &&
+          dt.month == now.month &&
+          dt.day == now.day;
+    }).toList();
+
     final next5Tasks = tasks.pending.where((t) {
       if (t.ocultarDaHome) return false;
       final dt = t.dateTime;
-      return dt != null && !dt.isBefore(startToday) && dt.isBefore(end5);
+      return dt != null && !dt.isBefore(startTomorrow) && dt.isBefore(end5);
     }).toList();
     final next5Appts = appointments.upcoming
-        .where((a) => !a.ocultarDaHome && a.date.isBefore(end5))
+        .where((a) => !a.ocultarDaHome && !a.isOnDate(now) && a.date.isBefore(end5))
         .toList();
+
     final allAppts =
         appointments.upcoming.where((a) => !a.ocultarDaHome).toList();
+    final allPendingTasks =
+        tasks.pending.where((t) => !t.ocultarDaHome).toList();
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
             expandedHeight: 0,
             floating: true,
             snap: true,
-            backgroundColor: AppColors.background,
-            title: const Row(
+            backgroundColor: context.colors.background,
+            title: Row(
               children: [
                 Icon(Icons.calendar_today_rounded,
                     color: AppColors.accent, size: 22),
                 SizedBox(width: 8),
-                Text('Dia Organizado',
+                Text(l.appTitle,
                     style: TextStyle(
-                        color: AppColors.textPrimary,
+                        color: context.colors.textPrimary,
                         fontSize: 18,
                         fontWeight: FontWeight.w700)),
               ],
             ),
             actions: [
               IconButton(
-                icon: const Icon(Icons.settings_outlined,
-                    color: AppColors.textSecondary),
+                icon: Icon(Icons.settings_outlined,
+                    color: context.colors.textSecondary),
                 onPressed: () => Navigator.push(context,
-                    MaterialPageRoute(builder: (_) => const SettingsScreen())),
+                    MaterialPageRoute(builder: (_) => SettingsScreen())),
               ),
             ],
           ),
@@ -175,23 +194,22 @@ class HomeScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                // Saudação + data
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${_greeting()}, ${auth.userName}',
+                        '${_greeting(context)}, ${auth.userName}',
                         style: GoogleFonts.notoSerif(
-                          color: AppColors.textPrimary,
+                          color: context.colors.textPrimary,
                           fontSize: 26,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        _formattedDate().toUpperCase(),
+                        _formattedDate(context).toUpperCase(),
                         style: GoogleFonts.spaceGrotesk(
                           color: AppColors.accent,
                           fontSize: 11,
@@ -203,7 +221,6 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ),
 
-                // Versículo do dia — hero escuro (design Sacred Order)
                 const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.fromLTRB(24, 22, 24, 22),
@@ -233,7 +250,7 @@ class HomeScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
-                          'VERSÍCULO DO DIA',
+                          l.verseOfDay,
                           style: GoogleFonts.spaceGrotesk(
                             color: AppColors.gold,
                             fontSize: 9,
@@ -268,7 +285,6 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ),
 
-                // Lembrete mais próximo
                 if (nextReminder != null && !nextReminder.ocultarDaHome) ...[
                   const SizedBox(height: 16),
                   Container(
@@ -288,8 +304,8 @@ class HomeScreen extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text(
-                                'Próximo lembrete',
+                              Text(
+                                l.nextReminder,
                                 style: TextStyle(
                                     color: AppColors.warning,
                                     fontSize: 11,
@@ -297,15 +313,15 @@ class HomeScreen extends StatelessWidget {
                               ),
                               Text(
                                 nextReminder.nome,
-                                style: const TextStyle(
-                                    color: AppColors.textPrimary,
+                                style: TextStyle(
+                                    color: context.colors.textPrimary,
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600),
                               ),
                               Text(
                                 '${nextReminder.horario}  ${nextReminder.data}',
-                                style: const TextStyle(
-                                    color: AppColors.textSecondary,
+                                style: TextStyle(
+                                    color: context.colors.textSecondary,
                                     fontSize: 12),
                               ),
                             ],
@@ -316,47 +332,72 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ],
 
-                // ── COMPROMISSOS DE HOJE ──
                 const SizedBox(height: 20),
-                _sectionTitle(Icons.event_available_outlined,
-                    'Compromissos de Hoje', '${todayAppts.length}'),
+                _sectionTitle(context,
+                    Icons.event_available_outlined,
+                    l.todaysAppointments,
+                    '${todayAppts.length + todayTasks.length}'),
                 const SizedBox(height: 8),
-                if (todayAppts.isEmpty)
-                  _emptyCard('Nenhum compromisso para hoje 🎉')
-                else
+                if (todayAppts.isEmpty && todayTasks.isEmpty)
+                  _emptyCard(context, l.noTodayAppointments)
+                else ...[
                   ...todayAppts.map((ap) => _apptCard(context, ap)),
+                  ...todayTasks.map((t) => TaskCard(
+                        task: t,
+                        onComplete: () =>
+                            context.read<TaskProvider>().completeTask(t.id),
+                        onEdit: () => TaskCreateModal.show(context, task: t),
+                        onReschedule: () => rescheduleTaskFlow(context, t),
+                        onHide: () => context
+                            .read<TaskProvider>()
+                            .toggleOcultarDaHome(t.id),
+                        onDelete: () => confirmDeleteTask(context, t),
+                      )),
+                ],
 
-                // Botão Nova Tarefa (destaque premium Sacred Order)
                 const SizedBox(height: 12),
                 _novaTarefaButton(context),
 
-                // ── ATIVIDADES DOS PRÓXIMOS 5 DIAS ──
                 const SizedBox(height: 22),
-                _sectionTitle(Icons.upcoming_outlined,
-                    'Atividades dos próximos 5 dias', null),
+                _sectionTitle(context, Icons.upcoming_outlined,
+                    l.next5DaysActivities, null),
                 const SizedBox(height: 8),
                 if (next5Tasks.isEmpty && next5Appts.isEmpty)
-                  _emptyCard('Nada nos próximos 5 dias.')
+                  _emptyCard(context, l.noNext5Days)
                 else ...[
                   ...next5Tasks.map((t) => TaskCard(
                         task: t,
                         onComplete: () =>
                             context.read<TaskProvider>().completeTask(t.id),
+                        onEdit: () => TaskCreateModal.show(context, task: t),
                         onReschedule: () => rescheduleTaskFlow(context, t),
                         onHide: () => context
                             .read<TaskProvider>()
                             .toggleOcultarDaHome(t.id),
+                        onDelete: () => confirmDeleteTask(context, t),
                       )),
                   ...next5Appts.map((ap) => _apptCard(context, ap)),
                 ],
 
-                // ── TODOS OS COMPROMISSOS ──
-                if (allAppts.isNotEmpty) ...[
+                if (allAppts.isNotEmpty || allPendingTasks.isNotEmpty) ...[
                   const SizedBox(height: 22),
-                  _sectionTitle(Icons.event_note_outlined,
-                      'Todos os Compromissos', '${allAppts.length}'),
+                  _sectionTitle(context,
+                      Icons.event_note_outlined,
+                      l.allAppointments,
+                      '${allAppts.length + allPendingTasks.length}'),
                   const SizedBox(height: 8),
                   ...allAppts.map((ap) => _apptCard(context, ap)),
+                  ...allPendingTasks.map((t) => TaskCard(
+                        task: t,
+                        onComplete: () =>
+                            context.read<TaskProvider>().completeTask(t.id),
+                        onEdit: () => TaskCreateModal.show(context, task: t),
+                        onReschedule: () => rescheduleTaskFlow(context, t),
+                        onHide: () => context
+                            .read<TaskProvider>()
+                            .toggleOcultarDaHome(t.id),
+                        onDelete: () => confirmDeleteTask(context, t),
+                      )),
                 ],
               ]),
             ),

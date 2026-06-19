@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 import '../../models/task_model.dart';
 import '../../models/appointment_model.dart';
+import '../../models/note_model.dart';
 import '../../providers/task_provider.dart';
 import '../../providers/note_provider.dart';
 import '../../providers/appointment_provider.dart';
@@ -13,6 +14,8 @@ import '../../providers/settings_provider.dart';
 import '../../services/ai_voice_service.dart';
 import '../../services/tts_service.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/dia_colors.dart';
+import '../../utils/l10n_ext.dart';
 
 /// Estado atual do ciclo de conversa (indicador visual).
 enum _VoicePhase { idle, listening, processing, responding }
@@ -22,6 +25,8 @@ enum _VoicePhase { idle, listening, processing, responding }
 class _PendingAction {
   final String kind; // create_task | create_appointment | create_note
   //                    | complete | delete | reschedule | cancel_appointment
+  //                    | edit_task | edit_appointment | edit_note
+  //                    | restore_task | restore_appointment | restore_note
   final Map<String, dynamic> data;
   final String summary; // texto curto exibido ao confirmar
 
@@ -114,8 +119,7 @@ class _VoiceScreenState extends State<VoiceScreen>
   /// Microfone principal: inicia (ou reinicia) a conversa hands-free.
   Future<void> _startConversation() async {
     if (!_available) {
-      setState(() => _feedback =
-          'Microfone não disponível neste navegador. Use o campo de texto abaixo.');
+      setState(() => _feedback = context.l10n.voiceMicUnavailable);
       return;
     }
     _ai?.resetConversation();
@@ -351,6 +355,21 @@ class _VoiceScreenState extends State<VoiceScreen>
     return null;
   }
 
+  NoteModel? _findNote(List<NoteModel> list, String query) {
+    final q = query.toLowerCase().trim();
+    if (q.isEmpty) return null;
+    for (final n in list) {
+      final t = n.titulo.toLowerCase();
+      if (t.contains(q) || q.contains(t)) return n;
+    }
+    final qWords = q.split(' ').where((w) => w.length > 3).toSet();
+    for (final n in list) {
+      final tWords = n.titulo.toLowerCase().split(' ').toSet();
+      if (qWords.intersection(tWords).isNotEmpty) return n;
+    }
+    return null;
+  }
+
   /// Mostra a resposta na tela, fala em voz alta e — em conversa contínua —
   /// reabre o microfone quando a fala termina.
   void _say(String msg) {
@@ -551,12 +570,54 @@ class _VoiceScreenState extends State<VoiceScreen>
       case 'complete':
         await tasks.completeTask(p.data['id'] as String);
       case 'delete':
-        await tasks.deleteTask(p.data['id'] as String);
+        await tasks.softDeleteTask(p.data['id'] as String);
       case 'reschedule':
         await tasks.rescheduleTask(p.data['id'] as String,
             p.data['data'] as String, p.data['horario'] as String);
       case 'cancel_appointment':
-        await appts.deleteAppointment(p.data['id'] as String);
+        await appts.softDeleteAppointment(p.data['id'] as String);
+      case 'edit_task':
+        final t = tasks.tasks.firstWhere((x) => x.id == p.data['id']);
+        await tasks.updateTask(t.copyWith(
+          nome: (p.data['nome'] as String?) ?? t.nome,
+          data: (p.data['data'] as String?) ?? t.data,
+          horario: (p.data['horario'] as String?) ?? t.horario,
+          prioridade: (p.data['prioridade'] as String?) ?? t.prioridade,
+        ));
+      case 'edit_appointment':
+        final ap = appts.appointments.firstWhere((x) => x.id == p.data['id']);
+        DateTime? newDate;
+        final dataStr = p.data['data'] as String?;
+        if (dataStr != null) {
+          final parts = dataStr.split('/');
+          if (parts.length == 3) {
+            newDate = DateTime(int.parse(parts[2]), int.parse(parts[1]),
+                int.parse(parts[0]));
+          }
+        }
+        await appts.updateAppointment(ap.copyWith(
+          titulo: (p.data['titulo'] as String?) ?? ap.titulo,
+          horario: (p.data['horario'] as String?) ?? ap.horario,
+          local: (p.data['local'] as String?) ?? ap.local,
+          prioridade: (p.data['prioridade'] as String?) ?? ap.prioridade,
+          dia: newDate?.day ?? ap.dia,
+          mes: newDate?.month ?? ap.mes,
+          ano: newDate?.year ?? ap.ano,
+        ));
+      case 'edit_note':
+        final n = notes.notes.firstWhere((x) => x.id == p.data['id']);
+        await notes.updateNote(NoteModel(
+          id: n.id,
+          titulo: (p.data['titulo'] as String?) ?? n.titulo,
+          corpo: (p.data['corpo'] as String?) ?? n.corpo,
+          dataCriacao: n.dataCriacao,
+        ));
+      case 'restore_task':
+        await tasks.restoreTask(p.data['id'] as String);
+      case 'restore_appointment':
+        await appts.restoreAppointment(p.data['id'] as String);
+      case 'restore_note':
+        await notes.restoreNote(p.data['id'] as String);
     }
   }
 
@@ -627,6 +688,232 @@ class _VoiceScreenState extends State<VoiceScreen>
         'create_note', {'titulo': titulo, 'corpo': corpo, 'raw': raw},
         'Nota "$titulo"');
     _say('Nota: "$titulo". Confirmo?');
+  }
+
+  // ─── Edição por voz ──────────────────────────────────────────────────
+
+  void _proposeEditTask(String raw) {
+    final tasks = context.read<TaskProvider>();
+    var rest = raw.replaceAll(
+        RegExp(
+            r'\b(editar|atualizar|modificar|jogar|empurrar|botar)\b|\btarefa\b',
+            caseSensitive: false),
+        ' ');
+
+    String taskPart = rest;
+    String changePart = '';
+
+    // Separador "nome — mudança"
+    final emDash = rest.indexOf(' — ');
+    final dash = rest.indexOf(' - ');
+    final sep = emDash >= 0 ? emDash : dash;
+    if (sep >= 0) {
+      taskPart = rest.substring(0, sep);
+      changePart = rest.substring(sep).replaceAll(RegExp(r'^ *[—\-]+ *'), '');
+    } else {
+      // Último "para" separa nome de mudança
+      final ms = RegExp(r'\bpara\b', caseSensitive: false).allMatches(rest);
+      if (ms.isNotEmpty) {
+        final m = ms.last;
+        taskPart = rest.substring(0, m.start);
+        changePart = rest.substring(m.end);
+      }
+    }
+
+    // "essa / este" → primeira tarefa pendente
+    final query = _clean(taskPart);
+    TaskModel? task;
+    if (RegExp(r'^(essa|este|esta|isso|aquela|aquele)$').hasMatch(query)) {
+      task = tasks.pending.isNotEmpty ? tasks.pending.first : null;
+    } else {
+      task = _findTask([...tasks.pending, ...tasks.completed], query);
+    }
+    if (task == null) {
+      _say('Não encontrei a tarefa "${query.isNotEmpty ? query : '?'}". Qual o nome exato?');
+      return;
+    }
+
+    final changeText = changePart.isEmpty ? raw : changePart;
+    final pr = _extractPriority(changeText);
+    final d = _extractDate(pr.rest);
+    final tm = _extractTime(d.rest);
+
+    final data = <String, dynamic>{'id': task.id, 'raw': raw};
+    final changeDesc = <String>[];
+
+    final wantsDate = changePart.isNotEmpty ||
+        RegExp(r'\b(amanhã|amanha|hoje|segunda|terça|quarta|quinta|sexta|sábado|domingo|dia \d|depois de amanhã)\b',
+                caseSensitive: false)
+            .hasMatch(raw);
+    if (wantsDate || tm.found) {
+      data['data'] = d.data;
+      data['horario'] = tm.horario;
+      changeDesc.add('${d.data} às ${tm.horario}');
+    }
+    if (RegExp(r'\bprioridade\b|urgente', caseSensitive: false).hasMatch(raw)) {
+      data['prioridade'] = pr.prioridade;
+      changeDesc.add('prioridade: ${AppColors.priorityLabel(pr.prioridade)}');
+    }
+
+    if (data.length <= 2) {
+      _say('O que quer alterar em "${task.nome}"? Diga a nova data, horário ou prioridade.');
+      return;
+    }
+    _pending = _PendingAction(
+        'edit_task', data, '"${task.nome}" atualizada: ${changeDesc.join(', ')}');
+    _say('Atualizar "${task.nome}": ${changeDesc.join(', ')}. Confirmo?');
+  }
+
+  void _proposeEditAppointment(String raw) {
+    final appts = context.read<AppointmentProvider>();
+    var rest = raw.replaceAll(
+        RegExp(
+            r'\b(editar|alterar|mudar|atualizar|modificar|prioridade)\b|\b(compromisso|reuni[ãa]o|consulta|evento)\b',
+            caseSensitive: false),
+        ' ');
+
+    String apPart = rest;
+    String changePart = '';
+
+    final emDash = rest.indexOf(' — ');
+    final dash = rest.indexOf(' - ');
+    final sep = emDash >= 0 ? emDash : dash;
+    if (sep >= 0) {
+      apPart = rest.substring(0, sep);
+      changePart = rest.substring(sep).replaceAll(RegExp(r'^ *[—\-]+ *'), '');
+    } else {
+      final ms = RegExp(r'\bpara\b', caseSensitive: false).allMatches(rest);
+      if (ms.isNotEmpty) {
+        final m = ms.last;
+        apPart = rest.substring(0, m.start);
+        changePart = rest.substring(m.end);
+      }
+    }
+
+    final query = _clean(apPart);
+    final ap = _findAppointment(appts.appointments, query);
+    if (ap == null) {
+      _say('Não encontrei o compromisso "${query.isNotEmpty ? query : '?'}". Qual o nome?');
+      return;
+    }
+
+    final changeText = changePart.isEmpty ? raw : changePart;
+    final pr = _extractPriority(changeText);
+    final d = _extractDate(pr.rest);
+    final tm = _extractTime(d.rest);
+
+    final data = <String, dynamic>{'id': ap.id, 'raw': raw};
+    final changeDesc = <String>[];
+
+    final wantsDate = changePart.isNotEmpty ||
+        RegExp(r'\b(amanhã|amanha|hoje|segunda|terça|quarta|quinta|sexta|sábado|domingo|dia \d|depois de amanhã)\b',
+                caseSensitive: false)
+            .hasMatch(raw);
+    if (wantsDate || tm.found) {
+      data['data'] = d.data;
+      data['horario'] = tm.horario;
+      changeDesc.add('${d.data} às ${tm.horario}');
+    }
+    if (RegExp(r'\bprioridade\b|urgente', caseSensitive: false).hasMatch(raw)) {
+      data['prioridade'] = pr.prioridade;
+      changeDesc.add('prioridade: ${AppColors.priorityLabel(pr.prioridade)}');
+    }
+
+    if (data.length <= 2) {
+      _say('O que quer alterar em "${ap.titulo}"? Diga a nova data, horário ou prioridade.');
+      return;
+    }
+    _pending = _PendingAction(
+        'edit_appointment', data, '"${ap.titulo}" atualizado: ${changeDesc.join(', ')}');
+    _say('Atualizar "${ap.titulo}": ${changeDesc.join(', ')}. Confirmo?');
+  }
+
+  void _proposeEditNote(String raw) {
+    final notesP = context.read<NoteProvider>();
+    var rest = raw.replaceAll(
+        RegExp(
+            r'\b(editar|alterar|mudar|acrescentar|adicionar|incluir|colocar|inserir)\b|\bnota\b',
+            caseSensitive: false),
+        ' ');
+
+    String notePart = rest;
+    String addPart = '';
+
+    final emDash = rest.indexOf(' — ');
+    final dash = rest.indexOf(' - ');
+    final sep = emDash >= 0 ? emDash : dash;
+    if (sep >= 0) {
+      notePart = rest.substring(0, sep);
+      addPart = rest.substring(sep).replaceAll(RegExp(r'^ *[—\-]+ *'), '');
+      addPart = addPart.replaceAll(
+          RegExp(r'^(adicionar|acrescentar|incluir|colocar|inserir)\s*',
+              caseSensitive: false),
+          '');
+    } else {
+      // "acrescentar X na nota Y"
+      final naReg = RegExp(r'\b(n[ao] nota|[àa] nota)\b', caseSensitive: false);
+      final m = naReg.firstMatch(rest);
+      if (m != null) {
+        addPart = _clean(rest.substring(0, m.start));
+        notePart = rest.substring(m.end);
+      }
+    }
+
+    final query = _clean(notePart);
+    final note = _findNote(notesP.notes, query);
+    if (note == null) {
+      _say('Não encontrei a nota "${query.isNotEmpty ? query : '?'}". Qual o título?');
+      return;
+    }
+
+    final content = _clean(addPart);
+    if (content.isEmpty) {
+      _say('O que quer adicionar na nota "${note.titulo}"?');
+      return;
+    }
+
+    final newCorpo =
+        note.corpo.isEmpty ? content : '${note.corpo}\n$content';
+    _pending = _PendingAction('edit_note',
+        {'id': note.id, 'titulo': note.titulo, 'corpo': newCorpo, 'raw': raw},
+        'Nota "${note.titulo}" atualizada');
+    _say('Adicionar "$content" à nota "${note.titulo}". Confirmo?');
+  }
+
+  void _proposeRestore(String raw) {
+    final tasks = context.read<TaskProvider>();
+    final appts = context.read<AppointmentProvider>();
+    final notesP = context.read<NoteProvider>();
+
+    var rest = raw.replaceAll(
+        RegExp(
+            r'\b(restaurar|recuperar|desfazer exclu[sç][ãa]o( de)?)\b|\b(tarefa|nota|compromisso|reuni[ãa]o|consulta)\b',
+            caseSensitive: false),
+        ' ');
+    final query = _clean(rest);
+
+    final t = _findTask(tasks.trashed, query);
+    if (t != null) {
+      _pending = _PendingAction(
+          'restore_task', {'id': t.id}, '"${t.nome}" restaurada da lixeira');
+      _say('Restaurar a tarefa "${t.nome}" da lixeira? Confirmo?');
+      return;
+    }
+    final ap = _findAppointment(appts.trashed, query);
+    if (ap != null) {
+      _pending = _PendingAction('restore_appointment', {'id': ap.id},
+          '"${ap.titulo}" restaurado da lixeira');
+      _say('Restaurar o compromisso "${ap.titulo}" da lixeira? Confirmo?');
+      return;
+    }
+    final n = _findNote(notesP.trashed, query);
+    if (n != null) {
+      _pending = _PendingAction(
+          'restore_note', {'id': n.id}, '"${n.titulo}" restaurada da lixeira');
+      _say('Restaurar a nota "${n.titulo}" da lixeira? Confirmo?');
+      return;
+    }
+    _say('Não encontrei "${query.isNotEmpty ? query : 'o item'}" na lixeira.');
   }
 
   /// Interpretador por regras (offline). Consultas/conversa respondem direto;
@@ -716,6 +1003,43 @@ class _VoiceScreenState extends State<VoiceScreen>
     }
 
     // ═══ Mutações: propõe e pede confirmação ═══
+
+    // Restaurar da lixeira
+    if (RegExp(r'\b(restaurar|recuperar|desfazer exclu)\b').hasMatch(lower)) {
+      _proposeRestore(text);
+      return;
+    }
+
+    // Editar tarefa (inclui "jogar X para amanhã" informal)
+    if (RegExp(r'\b(editar|atualizar|modific[ar])\b.*\btarefa\b|\btarefa\b.*\b(editar|atualizar)\b')
+            .hasMatch(lower) ||
+        RegExp(r'\bjogar\b.*(para|pra)\b').hasMatch(lower) ||
+        (RegExp(r'\b(alterar|mudar|trocar)\b').hasMatch(lower) &&
+            RegExp(r'\bprioridade\b').hasMatch(lower) &&
+            !RegExp(r'\b(compromisso|reuni[ãa]o|consulta|evento)\b')
+                .hasMatch(lower))) {
+      _proposeEditTask(text);
+      return;
+    }
+
+    // Editar compromisso (inclui alterar prioridade de compromisso)
+    if (RegExp(
+            r'\b(editar|alterar|mudar|atualizar)\b.*(compromisso|reuni[ãa]o|consulta|evento)|'
+            r'\b(compromisso|reuni[ãa]o|consulta|evento)\b.*\b(editar|alterar|mudar)\b|'
+            r'\balterar prioridade\b.*(compromisso|reuni[ãa]o|consulta|evento|reuni)')
+        .hasMatch(lower)) {
+      _proposeEditAppointment(text);
+      return;
+    }
+
+    // Editar nota (acrescentar conteúdo)
+    if (RegExp(
+            r'\b(editar|alterar|acrescentar|adicionar|incluir)\b.*\bnota\b|'
+            r'\bnota\b.*(editar|alterar|acrescentar|adicionar)')
+        .hasMatch(lower)) {
+      _proposeEditNote(text);
+      return;
+    }
 
     // Reagendar
     if (RegExp(r'reagendar|adiar|transferir|empurr|\bmuda\b|\bpassa\b')
@@ -820,9 +1144,10 @@ class _VoiceScreenState extends State<VoiceScreen>
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.backgroundSecondary,
+      decoration: BoxDecoration(
+        color: context.colors.backgroundSecondary,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: SafeArea(
@@ -836,23 +1161,23 @@ class _VoiceScreenState extends State<VoiceScreen>
                 child: Container(
                   width: 40, height: 4,
                   decoration: BoxDecoration(
-                      color: AppColors.border,
+                      color: context.colors.border,
                       borderRadius: BorderRadius.circular(2)),
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
-                'Comando de Voz',
+              Text(
+                l.voiceTitle,
                 style: TextStyle(
-                  color: AppColors.textPrimary,
+                  color: context.colors.textPrimary,
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Toque para iniciar — depois é só conversar',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              Text(
+                l.voiceSubtitle,
+                style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
               ),
               const SizedBox(height: 32),
 
@@ -864,7 +1189,7 @@ class _VoiceScreenState extends State<VoiceScreen>
                   height: 90,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: const LinearGradient(
+                    gradient: LinearGradient(
                       colors: [AppColors.gold, AppColors.primary],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -890,24 +1215,24 @@ class _VoiceScreenState extends State<VoiceScreen>
                   IconData icon;
                   String label;
                   if (_paused) {
-                    color = AppColors.textSecondary;
+                    color = context.colors.textSecondary;
                     icon = Icons.mic_off_rounded;
-                    label = 'Pausado — toque para retomar';
+                    label = l.voicePaused;
                   } else {
                     switch (_phase) {
                       case _VoicePhase.processing:
-                        color = const Color(0xFF1E88E5); // 🔵
+                        color = const Color(0xFF1E88E5);
                         icon = Icons.sync_rounded;
-                        label = '🔵 Processando';
+                        label = l.voiceProcessing;
                       case _VoicePhase.responding:
-                        color = const Color(0xFF8E24AA); // 🟣
+                        color = const Color(0xFF8E24AA);
                         icon = Icons.graphic_eq_rounded;
-                        label = '🟣 Respondendo';
+                        label = l.voiceResponding;
                       case _VoicePhase.listening:
                       case _VoicePhase.idle:
-                        color = AppColors.success; // 🟢
+                        color = AppColors.success;
                         icon = Icons.mic_rounded;
-                        label = '🟢 Ouvindo';
+                        label = l.voiceListening;
                     }
                   }
                   final pulsing =
@@ -966,11 +1291,9 @@ class _VoiceScreenState extends State<VoiceScreen>
                   Align(
                     alignment: Alignment.centerRight,
                     child: Text(
-                      _source == 'ai'
-                          ? '✨ Respondido pela IA'
-                          : '⚙️ Comandos básicos',
-                      style: const TextStyle(
-                          color: AppColors.textSecondary, fontSize: 10),
+                      _source == 'ai' ? l.voiceAnsweredByAI : l.voiceBasicMode,
+                      style: TextStyle(
+                          color: context.colors.textSecondary, fontSize: 10),
                     ),
                   ),
                 ],
@@ -984,12 +1307,12 @@ class _VoiceScreenState extends State<VoiceScreen>
                   Expanded(
                     child: TextField(
                       controller: _typedCtrl,
-                      style: const TextStyle(
-                          color: AppColors.textPrimary, fontSize: 14),
-                      decoration: const InputDecoration(
-                        hintText: 'Ou digite seu comando aqui...',
+                      style: TextStyle(
+                          color: context.colors.textPrimary, fontSize: 14),
+                      decoration: InputDecoration(
+                        hintText: l.voiceTypeHint,
                         prefixIcon: Icon(Icons.keyboard_outlined,
-                            color: AppColors.textSecondary, size: 20),
+                            color: context.colors.textSecondary, size: 20),
                         isDense: true,
                       ),
                       onSubmitted: (_) => _submitTyped(),
@@ -1000,7 +1323,7 @@ class _VoiceScreenState extends State<VoiceScreen>
                     onPressed: _submitTyped,
                     icon: const Icon(Icons.send_rounded,
                         color: AppColors.primary),
-                    tooltip: 'Executar comando',
+                    tooltip: l.voiceExecute,
                   ),
                 ],
               ),
@@ -1020,33 +1343,46 @@ class _CommandsHelp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     final groups = <String, List<String>>{
-      'Tarefas': [
+      l.navTasks: [
         'Criar tarefa pagar conta amanhã às 9h',
         'Criar tarefa urgente ligar para Carlos sexta às 15h',
         'Concluir tarefa pagar conta',
         'Reagendar pagar conta para sexta às 10h',
+        'Editar tarefa pagar conta — mudar para amanhã às 10h',
+        'Alterar prioridade da tarefa reunião para alta',
+        'Jogar tarefa pagar conta para amanhã',
         'Excluir tarefa pagar conta',
         'Listar minhas tarefas',
         'Listar tarefas concluídas',
       ],
-      'Agenda': [
+      l.navAgenda: [
         'Agendar reunião amanhã às 10h no escritório',
         'Marcar consulta dia 20 às 14h30',
+        'Editar compromisso reunião — mudar para sexta às 14h',
+        'Alterar prioridade da reunião para alta',
         'Cancelar compromisso reunião',
         'Listar meus compromissos',
       ],
-      'Notas': [
+      l.navNotes: [
         'Anotar comprar material de escritório',
+        'Editar nota compras — adicionar leite e ovos',
+        'Acrescentar leite e ovos na nota compras',
+      ],
+      l.navTrash: [
+        'Restaurar tarefa pagar conta',
+        'Recuperar nota compras',
+        'Restaurar compromisso reunião',
       ],
     };
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Comandos disponíveis:',
+        Text(l.voiceAvailableCommands,
             style: TextStyle(
-                color: AppColors.textSecondary,
+                color: context.colors.textSecondary,
                 fontSize: 12,
                 fontWeight: FontWeight.w600)),
         const SizedBox(height: 8),
@@ -1068,8 +1404,8 @@ class _CommandsHelp extends StatelessWidget {
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text('"$c"',
-                          style: const TextStyle(
-                              color: AppColors.textSecondary, fontSize: 12)),
+                          style: TextStyle(
+                              color: context.colors.textSecondary, fontSize: 12)),
                     ),
                   ],
                 ),

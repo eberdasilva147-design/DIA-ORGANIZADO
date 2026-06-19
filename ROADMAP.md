@@ -44,24 +44,39 @@ executar** · **prevenção de duplicidade** · **modo offline capturar + confir
 - [x] Agenda: indicadores 🟢 confirmado / 🟡 pendente / 🔵 hoje / 🔴 atrasado + editar/reagendar/excluir nos cards
 - [x] Home: destaque premium do botão "Nova Tarefa"
 
-### 🔜 FASE 2 — Tema e sistema de cores (fundacional)
-- [ ] Refatorar `AppColors` fixo → sistema dinâmico
-- [ ] Dark mode real + cores personalizáveis (dourado/azul/verde/vermelho/roxo/personalizado)
-- [ ] Persistência + troca imediata em todas as telas
+### ✅ FASE 2 — Tema e sistema de cores (CONCLUÍDA 2026-06-15)
+- [x] Refatorar `AppColors` fixo → sistema dinâmico (`DiaColors` ThemeExtension)
+- [x] Dark mode real (Sacred Order warm dark) — troca imediata via toggle em Configurações
+- [x] Persistência do tema (SettingsProvider + shared_preferences)
+- [x] Todas as telas, cards e modais respondem ao tema
 
-### 🔜 FASE 3 — Lixeira + exportação de dados
-- [ ] Soft-delete (tarefa/compromisso/nota) → Lixeira, retenção 30 dias, restaurar/excluir definitivo
-- [ ] Exportação de dados (CSV; depois PDF/Excel)
+### ✅ FASE 3 — Lixeira (CONCLUÍDA 2026-06-16)
+- [x] Soft-delete em tarefas, compromissos e notas (deleted_at no Supabase)
+- [x] Tela Lixeira no menu lateral (abaixo de Comando de Voz) com 3 abas
+- [x] Restaurar e Excluir definitivamente por item
+- [x] Esvaziar Lixeira (todos os itens de uma vez)
+- [x] Contador de dias restantes (30 dias de retenção)
+- [ ] Exportação de dados (CSV; depois PDF/Excel) — movida para backlog
 
-### 🔜 FASE 4 — Editar por voz (completar)
-- [ ] Editar tarefa por voz + editar nota por voz (o resto já funciona — não reconstruir)
+### ✅ FASE 4 — Editar por voz (CONCLUÍDA 2026-06-15)
+- [x] Editar tarefa por voz: mudar data/hora e prioridade ("editar tarefa X — amanhã às 10h")
+- [x] Editar compromisso por voz: mudar data/hora e prioridade
+- [x] Editar nota por voz: acrescentar conteúdo ("editar nota X — adicionar leite e ovos")
+- [x] Restaurar da lixeira por voz: tarefas, compromissos e notas
+- [x] Fallback inteligente: quando IA indisponível, interpreta intenção, datas, horários e prioridade
+- [x] IA (Gemini): corrigida para soft-delete (lixeira) em vez de exclusão permanente
+- [x] "Jogar X para amanhã" e outros comandos informais reconhecidos
 
-### 🔜 FASE 5 — Notificações/permissões (UI agora) + indicadores
-- [ ] Som/vibração/modo silencioso/horário de silêncio/não perturbar (UI + prefs)
-- [ ] Orientação clara quando a permissão for negada
+### ✅ FASE 5 — Notificações/permissões (CONCLUÍDA 2026-06-17)
+- [x] Som/vibração/modo silencioso/horário de silêncio/não perturbar (UI + prefs)
+- [x] Orientação clara quando a permissão for negada
 
-### 🔜 FASE 6 — Idiomas
-- [ ] i18n PT-BR / ES-PY / EN-US (menus, botões, mensagens, voz, configurações)
+### ✅ FASE 6 — Idiomas (CONCLUÍDA 2026-06-17)
+- [x] Infraestrutura i18n: ARB files PT/EN/ES + flutter gen-l10n + `context.l10n`
+- [x] Seletor de idioma em Configurações (PT-BR · EN-US · ES-PY)
+- [x] Todas as telas e widgets com strings via l10n
+- [x] Extensões `priorityLabel`, `statusLabel`, `priorityBadge` contextuais
+- [x] Formato de datas dinâmico (locale-aware em Agenda)
 
 ### ⛔ FASE 7 — Recursos nativos (Android/iOS)
 - [ ] Widgets, tela de bloqueio, notificações persistentes, integração com o dispositivo

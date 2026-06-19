@@ -7,13 +7,14 @@ import '../models/verse_model.dart';
 import 'data_service.dart';
 
 /// Implementação do [DataService] usando Supabase (Postgres + Realtime).
-/// O schema das tabelas está em supabase/schema.sql na raiz do projeto.
 class SupabaseDataService implements DataService {
   SupabaseClient get _db => Supabase.instance.client;
   String? get _uid => _db.auth.currentUser?.id;
 
   Map<String, dynamic> _withUser(Map<String, dynamic> map) =>
       map..['user_id'] = _uid;
+
+  String get _now => DateTime.now().toUtc().toIso8601String();
 
   // ─── Tarefas ────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,14 @@ class SupabaseDataService implements DataService {
   @override
   Future<void> updateTask(TaskModel task) =>
       _db.from('tarefas').update(task.toMap()).eq('id', task.id);
+
+  @override
+  Future<void> softDeleteTask(String id) =>
+      _db.from('tarefas').update({'deleted_at': _now}).eq('id', id);
+
+  @override
+  Future<void> restoreTask(String id) =>
+      _db.from('tarefas').update({'deleted_at': null}).eq('id', id);
 
   @override
   Future<void> deleteTask(String id) =>
@@ -70,6 +79,14 @@ class SupabaseDataService implements DataService {
       .eq('id', appointment.id);
 
   @override
+  Future<void> softDeleteAppointment(String id) =>
+      _db.from('compromissos').update({'deleted_at': _now}).eq('id', id);
+
+  @override
+  Future<void> restoreAppointment(String id) =>
+      _db.from('compromissos').update({'deleted_at': null}).eq('id', id);
+
+  @override
   Future<void> deleteAppointment(String id) =>
       _db.from('compromissos').delete().eq('id', id);
 
@@ -96,6 +113,14 @@ class SupabaseDataService implements DataService {
   @override
   Future<void> updateNote(NoteModel note) =>
       _db.from('notas').update(note.toMap()).eq('id', note.id);
+
+  @override
+  Future<void> softDeleteNote(String id) =>
+      _db.from('notas').update({'deleted_at': _now}).eq('id', id);
+
+  @override
+  Future<void> restoreNote(String id) =>
+      _db.from('notas').update({'deleted_at': null}).eq('id', id);
 
   @override
   Future<void> deleteNote(String id) =>

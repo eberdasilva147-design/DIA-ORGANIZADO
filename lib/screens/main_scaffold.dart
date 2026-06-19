@@ -7,6 +7,8 @@ import '../providers/appointment_provider.dart';
 import '../providers/note_provider.dart';
 import '../providers/verse_provider.dart';
 import '../utils/app_colors.dart';
+import '../utils/dia_colors.dart';
+import '../utils/l10n_ext.dart';
 import 'home/home_screen.dart';
 import 'tasks/tasks_screen.dart';
 import 'tasks/task_create_modal.dart';
@@ -14,6 +16,7 @@ import 'agenda/agenda_screen.dart';
 import 'notes/notes_screen.dart';
 import 'voice/voice_screen.dart';
 import 'settings/settings_screen.dart';
+import 'trash/trash_screen.dart';
 import 'auth/login_screen.dart';
 
 class MainScaffold extends StatefulWidget {
@@ -26,10 +29,10 @@ class MainScaffold extends StatefulWidget {
 class _MainScaffoldState extends State<MainScaffold> {
   int _currentIndex = 0;
 
-  final List<Widget> _screens = const [
+  final List<Widget> _screens = [
     HomeScreen(),
-    TasksScreen(),
-    SizedBox.shrink(), // placeholder for voice (opens as modal)
+    const TasksScreen(),
+    const SizedBox.shrink(),
     AgendaScreen(),
     NotesScreen(),
   ];
@@ -58,7 +61,7 @@ class _MainScaffoldState extends State<MainScaffold> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const VoiceScreen(),
+      builder: (_) => VoiceScreen(),
     );
   }
 
@@ -73,16 +76,15 @@ class _MainScaffoldState extends State<MainScaffold> {
         );
 
         if (wide) {
-          // Layout desktop: menu lateral (design Sacred Order)
           return Scaffold(
-            backgroundColor: AppColors.background,
+            backgroundColor: context.colors.background,
             body: Row(
               children: [
                 _buildSidebar(),
                 Expanded(
                   child: Center(
                     child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1100),
+                      constraints: BoxConstraints(maxWidth: 1100),
                       child: body,
                     ),
                   ),
@@ -92,7 +94,6 @@ class _MainScaffoldState extends State<MainScaffold> {
           );
         }
 
-        // Layout mobile: barra inferior
         return Scaffold(
           body: body,
           bottomNavigationBar: _buildBottomNav(),
@@ -105,11 +106,12 @@ class _MainScaffoldState extends State<MainScaffold> {
 
   Widget _buildSidebar() {
     final auth = context.watch<AuthProvider>();
+    final l = context.l10n;
     return Container(
       width: 250,
-      decoration: const BoxDecoration(
-        color: AppColors.backgroundSecondary,
-        border: Border(right: BorderSide(color: AppColors.border, width: 1)),
+      decoration: BoxDecoration(
+        color: context.colors.backgroundSecondary,
+        border: Border(right: BorderSide(color: context.colors.border, width: 1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -126,9 +128,9 @@ class _MainScaffoldState extends State<MainScaffold> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Dia Organizado',
+                    l.appTitle,
                     style: GoogleFonts.notoSerif(
-                      color: AppColors.textPrimary,
+                      color: context.colors.textPrimary,
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
                       height: 1.2,
@@ -169,15 +171,15 @@ class _MainScaffoldState extends State<MainScaffold> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.plusJakartaSans(
-                          color: AppColors.textPrimary,
+                          color: context.colors.textPrimary,
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       Text(
-                        'SANTUÁRIO DIGITAL',
+                        l.digitalSanctuary,
                         style: GoogleFonts.spaceGrotesk(
-                          color: AppColors.textSecondary,
+                          color: context.colors.textSecondary,
                           fontSize: 9,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 1,
@@ -192,11 +194,16 @@ class _MainScaffoldState extends State<MainScaffold> {
           const SizedBox(height: 28),
 
           // Navegação
-          _sideItem(0, Icons.auto_awesome_outlined, 'Início'),
-          _sideItem(1, Icons.check_circle_outline_rounded, 'Tarefas'),
-          _sideItem(3, Icons.calendar_month_outlined, 'Agenda'),
-          _sideItem(4, Icons.menu_book_outlined, 'Notas'),
-          _sideAction(Icons.mic_none_rounded, 'Comando de Voz', _openVoice),
+          _sideItem(0, Icons.auto_awesome_outlined, l.navHome),
+          _sideItem(1, Icons.check_circle_outline_rounded, l.navTasks),
+          _sideItem(3, Icons.calendar_month_outlined, l.navAgenda),
+          _sideItem(4, Icons.menu_book_outlined, l.navNotes),
+          _sideAction(Icons.mic_none_rounded, l.navVoice, _openVoice),
+          _sideAction(Icons.delete_outline_rounded, l.navTrash, () {
+            Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TrashScreen()));
+          }),
 
           const Spacer(),
 
@@ -213,7 +220,7 @@ class _MainScaffoldState extends State<MainScaffold> {
                 ),
               ),
               child: Text(
-                'Nova Tarefa',
+                l.newTask,
                 style: GoogleFonts.plusJakartaSans(
                   color: Colors.white,
                   fontWeight: FontWeight.w700,
@@ -227,12 +234,12 @@ class _MainScaffoldState extends State<MainScaffold> {
           const SizedBox(height: 12),
 
           // Rodapé
-          _sideAction(Icons.settings_outlined, 'Configurações', () {
+          _sideAction(Icons.settings_outlined, l.navSettings, () {
             Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const SettingsScreen()));
+                MaterialPageRoute(builder: (_) => SettingsScreen()));
           }),
           if (!auth.localMode)
-            _sideAction(Icons.logout_rounded, 'Sair', () async {
+            _sideAction(Icons.logout_rounded, l.navLogout, () async {
               await context.read<AuthProvider>().signOut();
               if (mounted) {
                 Navigator.of(context).pushAndRemoveUntil(
@@ -261,7 +268,7 @@ class _MainScaffoldState extends State<MainScaffold> {
                 const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             decoration: BoxDecoration(
               gradient: selected
-                  ? const LinearGradient(
+                  ? LinearGradient(
                       colors: [AppColors.gold, Color(0xFFC09A1F)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -283,12 +290,12 @@ class _MainScaffoldState extends State<MainScaffold> {
                 Icon(icon,
                     size: 19,
                     color:
-                        selected ? Colors.white : AppColors.textSecondary),
+                        selected ? Colors.white : context.colors.textSecondary),
                 const SizedBox(width: 12),
                 Text(
                   label,
                   style: GoogleFonts.plusJakartaSans(
-                    color: selected ? Colors.white : AppColors.textPrimary,
+                    color: selected ? Colors.white : context.colors.textPrimary,
                     fontSize: 13.5,
                     fontWeight:
                         selected ? FontWeight.w700 : FontWeight.w500,
@@ -315,12 +322,12 @@ class _MainScaffoldState extends State<MainScaffold> {
                 const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             child: Row(
               children: [
-                Icon(icon, size: 19, color: AppColors.textSecondary),
+                Icon(icon, size: 19, color: context.colors.textSecondary),
                 const SizedBox(width: 12),
                 Text(
                   label,
                   style: GoogleFonts.plusJakartaSans(
-                    color: AppColors.textPrimary,
+                    color: context.colors.textPrimary,
                     fontSize: 13.5,
                     fontWeight: FontWeight.w500,
                   ),
@@ -336,10 +343,11 @@ class _MainScaffoldState extends State<MainScaffold> {
   // ─── Barra inferior (mobile) ──────────────────────────────────────────────
 
   Widget _buildBottomNav() {
+    final l = context.l10n;
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.card,
-        border: Border(top: BorderSide(color: AppColors.border, width: 1)),
+      decoration: BoxDecoration(
+        color: context.colors.card,
+        border: Border(top: BorderSide(color: context.colors.border, width: 1)),
       ),
       child: SafeArea(
         top: false,
@@ -347,11 +355,11 @@ class _MainScaffoldState extends State<MainScaffold> {
           height: 64,
           child: Row(
             children: [
-              _navItem(0, Icons.home_rounded, 'Início'),
-              _navItem(1, Icons.check_circle_outline_rounded, 'Tarefas'),
+              _navItem(0, Icons.home_rounded, l.navHome),
+              _navItem(1, Icons.check_circle_outline_rounded, l.navTasks),
               _voiceButton(),
-              _navItem(3, Icons.calendar_month_rounded, 'Agenda'),
-              _navItem(4, Icons.sticky_note_2_outlined, 'Notas'),
+              _navItem(3, Icons.calendar_month_rounded, l.navAgenda),
+              _navItem(4, Icons.sticky_note_2_outlined, l.navNotes),
             ],
           ),
         ),
@@ -370,14 +378,14 @@ class _MainScaffoldState extends State<MainScaffold> {
           children: [
             Icon(
               icon,
-              color: selected ? AppColors.primary : AppColors.textSecondary,
+              color: selected ? AppColors.primary : context.colors.textSecondary,
               size: 24,
             ),
             const SizedBox(height: 3),
             Text(
               label,
               style: TextStyle(
-                color: selected ? AppColors.primary : AppColors.textSecondary,
+                color: selected ? AppColors.primary : context.colors.textSecondary,
                 fontSize: 10,
                 fontWeight:
                     selected ? FontWeight.w600 : FontWeight.normal,

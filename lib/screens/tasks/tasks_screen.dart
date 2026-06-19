@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../models/task_model.dart';
 import '../../providers/task_provider.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/dia_colors.dart';
+import '../../utils/l10n_ext.dart';
 import '../../widgets/task_card.dart';
 import 'task_create_modal.dart';
 
@@ -42,29 +44,31 @@ Future<void> rescheduleTaskFlow(BuildContext context, TaskModel task) async {
   await context.read<TaskProvider>().rescheduleTask(task.id, data, horario);
 }
 
-/// Pede confirmação antes de excluir uma tarefa.
+/// Move a tarefa para a lixeira com confirmação.
 Future<void> confirmDeleteTask(BuildContext context, TaskModel task) async {
+  final l = context.l10n;
   final ok = await showDialog<bool>(
     context: context,
     builder: (_) => AlertDialog(
-      backgroundColor: AppColors.card,
-      title: const Text('Excluir tarefa',
-          style: TextStyle(color: AppColors.textPrimary)),
-      content: Text('Excluir "${task.nome}"? Esta ação não pode ser desfeita.',
-          style: const TextStyle(color: AppColors.textSecondary)),
+      backgroundColor: context.colors.card,
+      title: Text(l.moveToTrash,
+          style: TextStyle(color: context.colors.textPrimary)),
+      content: Text(
+          l.moveToTrashTaskMsg(task.nome),
+          style: TextStyle(color: context.colors.textSecondary)),
       actions: [
         TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar')),
+            child: Text(l.cancel)),
         TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Excluir',
-                style: TextStyle(color: AppColors.error))),
+            child: Text(l.actionDelete,
+                style: const TextStyle(color: AppColors.error))),
       ],
     ),
   );
   if (ok == true && context.mounted) {
-    await context.read<TaskProvider>().deleteTask(task.id);
+    await context.read<TaskProvider>().softDeleteTask(task.id);
   }
 }
 
@@ -73,22 +77,23 @@ class TasksScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: context.colors.background,
         appBar: AppBar(
-          title: const Text('Tarefas'),
+          title: Text(l.tasksTitle),
           actions: [
             IconButton(
               icon: const Icon(Icons.add_circle_outline, color: AppColors.accent),
               onPressed: () => TaskCreateModal.show(context),
             ),
           ],
-          bottom: const TabBar(
+          bottom: TabBar(
             tabs: [
-              Tab(text: 'Pendentes'),
-              Tab(text: 'Concluídas'),
+              Tab(text: l.pendingTab),
+              Tab(text: l.completedTab),
             ],
           ),
         ),
@@ -103,8 +108,8 @@ class TasksScreen extends StatelessWidget {
           onPressed: () => TaskCreateModal.show(context),
           backgroundColor: AppColors.primary,
           icon: const Icon(Icons.add, color: Colors.white),
-          label: const Text('Nova tarefa',
-              style: TextStyle(color: Colors.white)),
+          label: Text(l.newTaskFab,
+              style: const TextStyle(color: Colors.white)),
         ),
       ),
     );
@@ -116,16 +121,17 @@ class _PendingTasksList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     final tasks = context.watch<TaskProvider>().pending;
     if (tasks.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.check_circle_outline, size: 56, color: AppColors.success),
-            SizedBox(height: 12),
-            Text('Nenhuma tarefa pendente!',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 16)),
+            const Icon(Icons.check_circle_outline, size: 56, color: AppColors.success),
+            const SizedBox(height: 12),
+            Text(l.noPendingTasks,
+                style: TextStyle(color: context.colors.textSecondary, fontSize: 16)),
           ],
         ),
       );
@@ -137,51 +143,9 @@ class _PendingTasksList extends StatelessWidget {
         task: tasks[i],
         onComplete: () =>
             context.read<TaskProvider>().completeTask(tasks[i].id),
-        onTap: () => _showOptions(context, tasks[i]),
+        onEdit: () => TaskCreateModal.show(context, task: tasks[i]),
         onReschedule: () => rescheduleTaskFlow(context, tasks[i]),
-      ),
-    );
-  }
-
-  void _showOptions(BuildContext context, TaskModel task) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.card,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.check_circle, color: AppColors.success),
-              title: const Text('Concluir',
-                  style: TextStyle(color: AppColors.textPrimary)),
-              onTap: () {
-                Navigator.pop(context);
-                context.read<TaskProvider>().completeTask(task.id);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.edit_outlined, color: AppColors.accent),
-              title: const Text('Editar / Reagendar',
-                  style: TextStyle(color: AppColors.textPrimary)),
-              onTap: () {
-                Navigator.pop(context);
-                TaskCreateModal.show(context, task: task);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline, color: AppColors.error),
-              title: const Text('Excluir',
-                  style: TextStyle(color: AppColors.textPrimary)),
-              onTap: () {
-                Navigator.pop(context);
-                context.read<TaskProvider>().deleteTask(task.id);
-              },
-            ),
-          ],
-        ),
+        onDelete: () => confirmDeleteTask(context, tasks[i]),
       ),
     );
   }
@@ -192,11 +156,12 @@ class _CompletedTasksList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     final tasks = context.watch<TaskProvider>().completed;
     if (tasks.isEmpty) {
-      return const Center(
-        child: Text('Nenhuma tarefa concluída ainda.',
-            style: TextStyle(color: AppColors.textSecondary)),
+      return Center(
+        child: Text(l.noCompletedTasks,
+            style: TextStyle(color: context.colors.textSecondary)),
       );
     }
     return ListView.builder(

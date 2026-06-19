@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../providers/auth_provider.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/dia_colors.dart';
+import '../../utils/l10n_ext.dart';
 import '../main_scaffold.dart';
 import 'register_screen.dart';
 
@@ -70,15 +72,16 @@ class _LoginScreenState extends State<LoginScreen> {
       await _saveOrClearCredentials();
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const MainScaffold()));
+          MaterialPageRoute(builder: (_) => MainScaffold()));
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     final auth = context.watch<AuthProvider>();
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -89,20 +92,20 @@ class _LoginScreenState extends State<LoginScreen> {
               const Icon(Icons.calendar_today_rounded,
                   size: 64, color: AppColors.accent),
               const SizedBox(height: 16),
-              const Text(
-                'Dia Organizado',
+              Text(
+                l.appTitle,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: AppColors.textPrimary,
+                  color: context.colors.textPrimary,
                   fontSize: 26,
                   fontWeight: FontWeight.w800,
                 ),
               ),
               const SizedBox(height: 6),
-              const Text(
-                'Faça login para continuar',
+              Text(
+                l.loginSubtitle,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                style: TextStyle(color: context.colors.textSecondary, fontSize: 14),
               ),
               const SizedBox(height: 40),
               Form(
@@ -112,34 +115,34 @@ class _LoginScreenState extends State<LoginScreen> {
                     TextFormField(
                       controller: _emailCtrl,
                       keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
-                        labelText: 'E-mail',
+                      decoration: InputDecoration(
+                        labelText: l.emailLabel,
                         prefixIcon: Icon(Icons.email_outlined,
-                            color: AppColors.textSecondary),
+                            color: context.colors.textSecondary),
                       ),
-                      style: const TextStyle(color: AppColors.textPrimary),
+                      style: TextStyle(color: context.colors.textPrimary),
                       validator: (v) =>
-                          v == null || !v.contains('@') ? 'E-mail inválido' : null,
+                          v == null || !v.contains('@') ? l.invalidEmail : null,
                     ),
                     const SizedBox(height: 14),
                     TextFormField(
                       controller: _passCtrl,
                       obscureText: _obscure,
                       decoration: InputDecoration(
-                        labelText: 'Senha',
-                        prefixIcon: const Icon(Icons.lock_outline,
-                            color: AppColors.textSecondary),
+                        labelText: l.passwordLabel,
+                        prefixIcon: Icon(Icons.lock_outline,
+                            color: context.colors.textSecondary),
                         suffixIcon: IconButton(
                           icon: Icon(
                             _obscure ? Icons.visibility_off : Icons.visibility,
-                            color: AppColors.textSecondary,
+                            color: context.colors.textSecondary,
                           ),
                           onPressed: () => setState(() => _obscure = !_obscure),
                         ),
                       ),
-                      style: const TextStyle(color: AppColors.textPrimary),
+                      style: TextStyle(color: context.colors.textPrimary),
                       validator: (v) =>
-                          v == null || v.length < 6 ? 'Mínimo 6 caracteres' : null,
+                          v == null || v.length < 6 ? l.minChars : null,
                     ),
                     const SizedBox(height: 8),
                     Row(
@@ -153,8 +156,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(4),
                             ),
-                            side: const BorderSide(
-                                color: AppColors.textSecondary, width: 1.5),
+                            side: BorderSide(
+                                color: context.colors.textSecondary, width: 1.5),
                             onChanged: (v) =>
                                 setState(() => _rememberMe = v ?? false),
                           ),
@@ -163,10 +166,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         GestureDetector(
                           onTap: () =>
                               setState(() => _rememberMe = !_rememberMe),
-                          child: const Text(
-                            'Lembrar e-mail e senha',
+                          child: Text(
+                            l.rememberCredentials,
                             style: TextStyle(
-                                color: AppColors.textSecondary, fontSize: 13),
+                                color: context.colors.textSecondary, fontSize: 13),
                           ),
                         ),
                       ],
@@ -196,15 +199,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       onPressed: _submit,
                       style: ElevatedButton.styleFrom(
                           minimumSize: const Size.fromHeight(52)),
-                      child: const Text('Entrar',
-                          style: TextStyle(fontSize: 17)),
+                      child: Text(l.loginButton,
+                          style: const TextStyle(fontSize: 17)),
                     ),
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text('Não tem conta? ',
-                      style: TextStyle(color: AppColors.textSecondary)),
+                  Text(l.noAccount,
+                      style: TextStyle(color: context.colors.textSecondary)),
                   TextButton(
                     onPressed: () {
                       auth.clearError();
@@ -213,7 +216,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           MaterialPageRoute(
                               builder: (_) => const RegisterScreen()));
                     },
-                    child: const Text('Cadastre-se'),
+                    child: Text(l.registerLink),
                   ),
                 ],
               ),
