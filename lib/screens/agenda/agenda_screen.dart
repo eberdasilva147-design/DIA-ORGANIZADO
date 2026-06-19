@@ -419,6 +419,12 @@ class _MonthViewState extends State<_MonthView> {
   }
 
   @override
+  void deactivate() {
+    _hidePopup();
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
     _hidePopup();
     super.dispose();
